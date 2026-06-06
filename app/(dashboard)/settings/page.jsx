@@ -71,6 +71,7 @@ export default function SettingsPage() {
             host: data.host || '',
             port: String(data.port || '587'),
             user: data.user || '',
+            pass: data.pass || '',
             fromName: data.fromName || 'Syncronz',
             fromEmail: data.fromEmail || '',
           }));

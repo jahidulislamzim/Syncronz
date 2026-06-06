@@ -1,7 +1,71 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
+    
+    // Helper function to check if the user is a member of the board
+    function isBoardMember(boardId) {
+      return request.auth != null && exists(/databases/$(database)/documents/boards/$(boardId)/members/$(request.auth.uid));
+    }
+
+    // User Profile Rules
+    match /users/{userId} {
+      // Any authenticated user can read profiles (to show member names/avatars)
+      allow read: if request.auth != null;
+      // Only the user themselves can write their own profile
+      allow write: if request.auth != null && request.auth.uid == userId;
+
+      // User's private notifications
+      match /notifications/{notificationId} {
+        // Only the user can read/delete their notifications
+        allow read, delete: if request.auth != null && request.auth.uid == userId;
+        // Any authenticated user can create a notification for this user (e.g. for assignments, comments, etc.)
+        allow create: if request.auth != null;
+      }
+
+      // User's focus sessions
+      match /focusSessions/{sessionId} {
+        // Only the user can read/write their focus sessions
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // Board Rules
+    match /boards/{boardId} {
+      // Allow authenticated users to read/get board info (needed for joining/viewing)
+      allow read: if request.auth != null;
+      // Allow any authenticated user to create a board, as long as they set themselves as the creator
+      allow create: if request.auth != null && request.resource.data.creatorId == request.auth.uid;
+      // Only board members can update or delete the board
+      allow update, delete: if isBoardMember(boardId);
+
+      // Board Members subcollection
+      match /members/{memberId} {
+        // Anyone authenticated can read member list, or create their own membership (to join)
+        allow read: if request.auth != null;
+        allow create: if request.auth != null && (request.auth.uid == memberId || isBoardMember(boardId));
+        // Only existing board members can update/delete member roles
+        allow update, delete: if isBoardMember(boardId);
+      }
+
+      // Tasks subcollection - only accessible by board members
+      match /tasks/{taskId} {
+        allow read, write: if isBoardMember(boardId);
+      }
+
+      // Activity subcollection - only accessible by board members
+      match /activity/{activityId} {
+        allow read, write: if isBoardMember(boardId);
+      }
+    }
+
+    // Settings collection
+    match /settings/{settingId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // Invited Users collection
+    match /invited_users/{email} {
       allow read, write: if request.auth != null;
     }
   }

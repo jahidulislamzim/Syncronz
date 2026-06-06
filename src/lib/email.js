@@ -39,7 +39,7 @@ function buildInviteHtml({ displayName, adminName, inviteLink }) {
               <h2 style="color:#1e293b;font-size:20px;font-weight:700;margin:0 0 8px 0;">You're Invited</h2>
               <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px 0;">Hi ${name},</p>
               <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px 0;">
-                <strong style="color:#1e293b;">${adminName}</strong> has invited you to join <strong style="color:#1e293b;">Syncronz</strong> — a collaborative task management workspace where your team can track, organize, and complete work together in real time.
+                You have been invited to join <strong style="color:#1e293b;">Syncronz</strong>, a collaborative task management workspace where your team can track, organize, and complete work together in real time.
               </p>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
@@ -70,13 +70,13 @@ function buildInviteText({ displayName, adminName, inviteLink }) {
   return [
     `Hi ${name},`,
     '',
-    `${adminName} has invited you to join Syncronz — a collaborative task management workspace.`,
+    `You have been invited to join Syncronz, a collaborative task management workspace.`,
     '',
     `Accept your invitation here: ${inviteLink}`,
     '',
     'If you weren\'t expecting this, you can safely ignore this email.',
     '',
-    '— Syncronz Team',
+    'Syncronz Team',
   ].join('\n');
 }
 
@@ -92,7 +92,7 @@ export async function sendInviteEmail({ smtpConfig, to, displayName, adminName, 
   await transport.sendMail({
     from: `"${smtpConfig.fromName || 'Syncronz'}" <${smtpConfig.fromEmail || smtpConfig.user}>`,
     to,
-    subject: `You've been invited to Syncronz by ${adminName}`,
+    subject: `You've been invited to join Syncronz`,
     html,
     text,
   });

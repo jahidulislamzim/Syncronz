@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { encrypt } from '../../../src/lib/crypto.js';
+import { encrypt, decrypt } from '../../../src/lib/crypto.js';
 import { verifyFirebaseToken } from '../../../src/lib/firebase/auth.js';
 import { readDocument, writeDocument } from '../../../src/lib/firebase/firestore.js';
 
@@ -56,11 +56,21 @@ export async function GET(request) {
       return NextResponse.json({ configured: false });
     }
 
+    let passDecrypted = '';
+    if (data.passEncrypted) {
+      try {
+        passDecrypted = decrypt(data.passEncrypted, process.env.SMTP_ENCRYPTION_KEY);
+      } catch (err) {
+        console.error('Failed to decrypt SMTP password:', err);
+      }
+    }
+
     return NextResponse.json({
       configured: true,
       host: data.host || '',
       port: data.port || 587,
       user: data.user || '',
+      pass: passDecrypted,
       fromName: data.fromName || '',
       fromEmail: data.fromEmail || '',
       updatedAt: data.updatedAt || null,
