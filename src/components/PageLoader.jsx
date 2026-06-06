@@ -1,5 +1,6 @@
+'use client';
+
 import { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
 
 function SkeletonBlock({ className }) {
   return <div className={`animate-pulse bg-slate-200 rounded-xl ${className}`} />;

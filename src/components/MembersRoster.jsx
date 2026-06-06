@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { db } from '../lib/firebase.js';

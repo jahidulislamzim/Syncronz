@@ -1,14 +1,24 @@
-import React from 'react';
-import { Navigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '../../src/context/AuthContext.jsx';
 import { ShieldCheck } from 'lucide-react';
 
-export const AccessDeniedPage = () => {
+export default function AccessDeniedPage() {
   const { user, isAllowed, adminEmail, signOut, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading) {
+      if (!user) router.replace('/login');
+      else if (isAllowed) router.replace('/');
+    }
+  }, [user, isAllowed, loading, router]);
 
   if (loading) return null;
-  if (!user) return <Navigate to="/login" replace />;
-  if (isAllowed) return <Navigate to="/" replace />;
+  if (!user || isAllowed) return null;
+
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
       <div className="max-w-md w-full text-center bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-5">
@@ -33,4 +43,4 @@ export const AccessDeniedPage = () => {
       </div>
     </div>
   );
-};
+}

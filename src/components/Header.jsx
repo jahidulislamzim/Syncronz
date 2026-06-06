@@ -1,5 +1,7 @@
+'use client';
+
 import React, { useEffect, useState, useRef } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '../context/AuthContext.jsx';
 import { db } from '../lib/firebase.js';
 import { collection, query, orderBy, limit, onSnapshot, doc } from 'firebase/firestore';
@@ -9,8 +11,7 @@ import { markNotificationAsRead, clearAllNotifications } from '../lib/services.j
 
 export const Header = ({ currentBoardName: propBoardName, onOpenBoardSelector: propSelector }) => {
   const { user, profile, signOut } = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
+  const navigate = useRouter();
   const params = useParams();
   const [boardName, setBoardName] = useState(null);
 
@@ -35,7 +36,7 @@ export const Header = ({ currentBoardName: propBoardName, onOpenBoardSelector: p
   }, [boardId, propBoardName]);
 
   const currentBoardName = boardName;
-  const onOpenBoardSelector = propSelector || (() => navigate('/workspace'));
+  const onOpenBoardSelector = propSelector || (() => navigate.push('/boards/new'));
   const [notifications, setNotifications] = useState([]);
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const [activeToast, setActiveToast] = useState(null);

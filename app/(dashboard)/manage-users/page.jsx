@@ -1,18 +1,18 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'next/navigation';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { doc } from 'firebase/firestore';
-import { db } from '../lib/firebase.js';
-import { getAllUsers, updateUserProfile, inviteUser, revokeInvite, getInvitedUsers, deleteUserProfile } from '../lib/services.js';
-import { useAuth } from '../context/AuthContext.jsx';
+import { db } from '../../../src/lib/firebase.js';
+import { getAllUsers, updateUserProfile, inviteUser, revokeInvite, getInvitedUsers, deleteUserProfile } from '../../../src/lib/services.js';
+import { useAuth } from '../../../src/context/AuthContext.jsx';
 import {
   Mail, ShieldCheck, Plus, Check, X, Search,
   Users, UserPlus, Clock, CheckCircle, XCircle, Ban,
   AlertTriangle, Sparkles, Copy, Crown, Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ManageUsersSkeleton } from './PageLoader.jsx';
+import { ManageUsersSkeleton } from '../../../src/components/PageLoader.jsx';
 
 function formatDate(iso) {
   if (!iso) return '-';
@@ -46,13 +46,13 @@ const Toast = ({ message, type, onClose }) => (
   </motion.div>
 );
 
-export const ManageUsers = () => {
+export default function ManageUsers() {
   const { user, profile, adminEmail } = useAuth();
-  const navigate = useNavigate();
+  const navigate = useRouter();
 
   useEffect(() => {
     if (!profile?.isAdmin) {
-      navigate('/', { replace: true });
+      navigate.replace('/');
     }
   }, [profile, navigate]);
   const [users, setUsers] = useState([]);
@@ -165,7 +165,6 @@ export const ManageUsers = () => {
         {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       </AnimatePresence>
 
-      {/* Header */}
       <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl p-8 md:p-10">
         <div className="absolute top-[-30%] right-[-10%] w-[50%] h-[50%] bg-indigo-500/15 rounded-full blur-[100px] pointer-events-none" />
         <div className="absolute bottom-[-30%] left-[-10%] w-[50%] h-[50%] bg-emerald-500/10 rounded-full blur-[100px] pointer-events-none" />
@@ -184,7 +183,6 @@ export const ManageUsers = () => {
         </div>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
           <div className="flex items-center gap-3">
@@ -215,7 +213,6 @@ export const ManageUsers = () => {
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
         <div className="h-1 bg-gradient-to-r from-indigo-500 to-emerald-500" />
         <div className="flex items-center gap-1 p-1.5">
@@ -287,7 +284,6 @@ export const ManageUsers = () => {
         </div>
       </div>
 
-      {/* Tab Content: Invite */}
       {activeTab === 'invite' && (
         <div className="space-y-6">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
@@ -424,7 +420,6 @@ export const ManageUsers = () => {
         </div>
       )}
 
-      {/* Tab Content: Members */}
       {activeTab === 'members' && (
         <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
           <div className="p-6 border-b border-slate-100">
@@ -524,7 +519,6 @@ export const ManageUsers = () => {
         </div>
       )}
 
-      {/* Tab Content: Admin */}
       {activeTab === 'admin' && (
         <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
           <div className="p-6 border-b border-slate-100">
@@ -625,4 +619,4 @@ export const ManageUsers = () => {
       )}
     </div>
   );
-};
+}

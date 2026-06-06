@@ -1,17 +1,19 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
-import { db } from '../lib/firebase.js';
-import { collection, query, onSnapshot } from 'firebase/firestore';
-import { getAllUsers, getInvitedUsers } from '../lib/services.js';
-import { Sparkles, LayoutDashboard, Users, ShieldCheck, ArrowRight, Crown, CheckCircle, Clock, RefreshCw, Plus } from 'lucide-react';
-import { DashboardSkeleton } from '../components/PageLoader.jsx';
+'use client';
 
-export const DashboardHome = () => {
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '../../src/context/AuthContext.jsx';
+import { db } from '../../src/lib/firebase.js';
+import { collection, query, onSnapshot } from 'firebase/firestore';
+import { getAllUsers, getInvitedUsers } from '../../src/lib/services.js';
+import { Sparkles, LayoutDashboard, Users, ShieldCheck, ArrowRight, Crown, CheckCircle, Clock, RefreshCw, Plus } from 'lucide-react';
+import { DashboardSkeleton } from '../../src/components/PageLoader.jsx';
+
+export default function DashboardHome() {
   const { user, profile, adminEmail } = useAuth();
-  const navigate = useNavigate();
+  const navigate = useRouter();
   const [errorMsg, setErrorMsg] = useState('');
-  const [pageLoading, setPageLoading] = useState(!!profile?.isAdmin);
+  const [pageLoading, setPageLoading] = useState(true);
 
   const [allBoards, setAllBoards] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
@@ -19,7 +21,9 @@ export const DashboardHome = () => {
   const [boardTaskCounts, setBoardTaskCounts] = useState({});
 
   useEffect(() => {
+    if (!profile) return;
     if (!profile?.isAdmin) { setPageLoading(false); return; }
+    setPageLoading(true);
     const q = query(collection(db, 'boards'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list = [];
@@ -28,16 +32,12 @@ export const DashboardHome = () => {
       });
       setAllBoards(list);
     });
-    return () => unsubscribe();
-  }, [profile?.isAdmin]);
-
-  useEffect(() => {
-    if (!profile?.isAdmin) return;
     Promise.all([
       getAllUsers().then(u => { if (u) setAllUsers(u); }),
       getInvitedUsers().then(setInvitedUsers)
     ]).then(() => setPageLoading(false));
-  }, [profile?.isAdmin]);
+    return () => unsubscribe();
+  }, [profile]);
 
   useEffect(() => {
     if (!profile?.isAdmin) return;
@@ -63,9 +63,10 @@ export const DashboardHome = () => {
     totalTasks: Object.values(boardTaskCounts).reduce((a, b) => a + b, 0),
   };
 
+  if (pageLoading) return <DashboardSkeleton />;
+
   return (
     <div className="max-w-5xl mx-auto w-full py-8 space-y-8">
-      {/* Welcome Hero */}
       <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl p-8 md:p-10">
         <div className="absolute top-[-30%] right-[-10%] w-[50%] h-[50%] bg-indigo-500/15 rounded-full blur-[100px] pointer-events-none" />
         <div className="absolute bottom-[-30%] left-[-10%] w-[50%] h-[50%] bg-emerald-500/10 rounded-full blur-[100px] pointer-events-none" />
@@ -88,7 +89,7 @@ export const DashboardHome = () => {
           </div>
           <button
             onClick={() => {
-    getAllUsers().then(u => { if (u) setAllUsers(u); });
+              getAllUsers().then(u => { if (u) setAllUsers(u); });
               getInvitedUsers().then(setInvitedUsers);
             }}
             className="shrink-0 p-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-slate-400 hover:text-white transition cursor-pointer"
@@ -99,7 +100,6 @@ export const DashboardHome = () => {
         </div>
       </div>
 
-      {/* Admin Dashboard Stats */}
       {profile?.isAdmin && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -159,7 +159,6 @@ export const DashboardHome = () => {
             </div>
           </div>
 
-          {/* Boards & Users panels */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
               <div className="h-1 bg-gradient-to-r from-indigo-500 to-blue-500" />
@@ -176,7 +175,7 @@ export const DashboardHome = () => {
                   allBoards.map(board => (
                     <div
                       key={board.boardId}
-                      onClick={() => navigate(`/boards/${board.boardId}`)}
+                      onClick={() => navigate.push(`/boards/${board.boardId}`)}
                       className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50/50 transition cursor-pointer"
                     >
                       <div className="min-w-0 flex-1">
@@ -212,9 +211,7 @@ export const DashboardHome = () => {
                 ) : (
                   allUsers.map(u => {
                     const isAdminUser = u.isAdmin || isSuperAdmin(u);
-  if (pageLoading) return <DashboardSkeleton />;
-
-  return (
+                    return (
                       <div key={u.uid} className="flex items-center justify-between px-5 py-3 hover:bg-slate-50/50 transition">
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           <img
@@ -238,14 +235,13 @@ export const DashboardHome = () => {
             </div>
           </div>
 
-          {/* Quick Actions */}
           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
             <div className="h-1 bg-gradient-to-r from-slate-500 to-slate-600" />
             <div className="p-5">
               <h2 className="text-sm font-bold text-slate-900">Quick Actions</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
                 <button
-                  onClick={() => navigate('/manage-users')}
+                  onClick={() => navigate.push('/manage-users')}
                   className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition text-left cursor-pointer"
                 >
                   <Users className="w-5 h-5 text-indigo-500 shrink-0" />
@@ -255,7 +251,7 @@ export const DashboardHome = () => {
                   </div>
                 </button>
                 <button
-                  onClick={() => navigate('/boards/new')}
+                  onClick={() => navigate.push('/boards/new')}
                   className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition text-left cursor-pointer"
                 >
                   <Plus className="w-5 h-5 text-emerald-500 shrink-0" />
@@ -278,4 +274,4 @@ export const DashboardHome = () => {
       )}
     </div>
   );
-};
+}

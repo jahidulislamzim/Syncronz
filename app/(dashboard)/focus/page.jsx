@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useAuth } from '../context/AuthContext.jsx';
-import { saveFocusSession, getFocusSessions } from '../lib/services.js';
+'use client';
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useAuth } from '../../../src/context/AuthContext.jsx';
+import { saveFocusSession, getFocusSessions } from '../../../src/lib/services.js';
 import {
   Play, Pause, RotateCcw, Clock, History, CheckCircle
 } from 'lucide-react';
-import { FocusTimerSkeleton } from '../components/PageLoader.jsx';
+import { FocusTimerSkeleton } from '../../../src/components/PageLoader.jsx';
 
 function playBell() {
   try {
@@ -35,7 +37,7 @@ function formatTime(seconds) {
 
 const PRESETS = [25, 50];
 
-export const FocusTimer = () => {
+export default function FocusTimer() {
   const { user } = useAuth();
   const [taskName, setTaskName] = useState('');
   const [duration, setDuration] = useState(25);
@@ -172,7 +174,6 @@ export const FocusTimer = () => {
         <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col min-h-0">
           <div className="h-1 bg-gradient-to-r from-indigo-500 to-emerald-500 shrink-0" />
           <div className="flex-1 p-4 md:p-6 space-y-3">
-            {/* Task Name */}
             <input
               type="text"
               placeholder="What are you focusing on?"
@@ -182,7 +183,6 @@ export const FocusTimer = () => {
               className="w-full text-center text-base font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition disabled:opacity-50"
             />
 
-            {/* Timer Display */}
             <div className="flex flex-col items-center py-1">
               <div className="relative">
                 <svg width={260} height={260} className="-rotate-90">
@@ -216,7 +216,6 @@ export const FocusTimer = () => {
               </div>
             </div>
 
-            {/* Duration Presets */}
             <div className="flex items-center justify-center gap-2">
               {PRESETS.map(m => (
                 <button
@@ -249,7 +248,6 @@ export const FocusTimer = () => {
               </div>
             </div>
 
-            {/* Controls */}
             <div className="flex items-center justify-center gap-3">
               {!running && !paused ? (
                 <button
@@ -326,7 +324,6 @@ export const FocusTimer = () => {
         </div>
       </div>
 
-      {/* Completion overlay */}
       {completed && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-6">
           <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center space-y-5 border border-slate-200">
@@ -350,4 +347,4 @@ export const FocusTimer = () => {
       )}
     </div>
   );
-};
+}

@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+'use client';
+
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, deleteDoc } from 'firebase/firestore';
 import { auth, loginWithGoogle, logoutUser, db } from '../lib/firebase.js';
@@ -12,14 +14,30 @@ export const AuthProvider = ({ children }) => {
   const [isAllowed, setIsAllowed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [adminEmail, setAdminEmail] = useState(null);
+  const [initError, setInitError] = useState(null);
+  const timeoutRef = useRef(null);
+
+  // Safety timeout — never stay loading >15s
+  useEffect(() => {
+    timeoutRef.current = setTimeout(() => {
+      setLoading(false);
+    }, 15000);
+    return () => clearTimeout(timeoutRef.current);
+  }, []);
 
   useEffect(() => {
-    const envAdmin = import.meta.env?.VITE_ADMIN_EMAIL || null;
+    const envAdmin = process.env.NEXT_PUBLIC_ADMIN_EMAIL || null;
     setAdminEmail(envAdmin ? envAdmin.toLowerCase() : null);
   }, []);
 
   useEffect(() => {
+    if (!auth) {
+      setInitError('Firebase Auth unavailable');
+      setLoading(false);
+      return;
+    }
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       setUser(firebaseUser);
 
       if (!firebaseUser) {
@@ -30,7 +48,7 @@ export const AuthProvider = ({ children }) => {
       }
 
       try {
-        const resolvedAdmin = adminEmail || import.meta.env?.VITE_ADMIN_EMAIL || null;
+        const resolvedAdmin = adminEmail || process.env.NEXT_PUBLIC_ADMIN_EMAIL || null;
         const emailLower = firebaseUser.email?.toLowerCase();
 
         let allowed = false;
@@ -109,7 +127,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, isAllowed, loading, adminEmail, signIn: handleSignIn, signOut: handleSignOut }}>
+    <AuthContext.Provider value={{ user, profile, isAllowed, loading, adminEmail, initError, signIn: handleSignIn, signOut: handleSignOut }}>
       {children}
     </AuthContext.Provider>
   );

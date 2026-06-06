@@ -1,5 +1,8 @@
+'use client';
+
 import React, { useEffect, useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useAuth } from '../context/AuthContext.jsx';
 import { db } from '../lib/firebase.js';
 import { collection, query, onSnapshot } from 'firebase/firestore';
@@ -7,7 +10,13 @@ import { Landmark, ShieldCheck, Plus, Timer } from 'lucide-react';
 
 export const Sidebar = () => {
   const { user, profile } = useAuth();
+  const pathname = usePathname();
   const [allBoards, setAllBoards] = useState([]);
+
+  const isActive = (path) => {
+    if (path === '/') return pathname === '/';
+    return pathname.startsWith(path);
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -38,50 +47,41 @@ export const Sidebar = () => {
         <nav className="flex-1 px-4 space-y-1">
           <div className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-2 px-2 font-mono">Navigation</div>
           {profile?.isAdmin && (
-            <NavLink
-              to="/"
-              end
-              className={({ isActive }) =>
-                `w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl text-sm transition cursor-pointer ${isActive ? 'bg-slate-800 text-white font-semibold' : 'text-slate-100 hover:bg-slate-800/60 hover:text-white font-medium'}`
-              }
+            <Link
+              href="/"
+              className={`w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl text-sm transition cursor-pointer ${isActive('/') && pathname === '/' ? 'bg-slate-800 text-white font-semibold' : 'text-slate-100 hover:bg-slate-800/60 hover:text-white font-medium'}`}
             >
               <Landmark className="w-4 h-4 text-blue-400" />
               <span>Dashboard Home</span>
-            </NavLink>
+            </Link>
           )}
           {profile?.isAdmin && (
-            <NavLink
-              to="/manage-users"
-              className={({ isActive }) =>
-                `w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl text-sm transition cursor-pointer ${isActive ? 'bg-slate-800 text-white font-semibold' : 'text-slate-100 hover:bg-slate-800/60 hover:text-white font-medium'}`
-              }
+            <Link
+              href="/manage-users"
+              className={`w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl text-sm transition cursor-pointer ${isActive('/manage-users') ? 'bg-slate-800 text-white font-semibold' : 'text-slate-100 hover:bg-slate-800/60 hover:text-white font-medium'}`}
             >
               <ShieldCheck className="w-4 h-4 text-indigo-400" />
               <span>Manage Users</span>
-            </NavLink>
+            </Link>
           )}
 
           <div className="mt-8 text-xs font-bold text-slate-200 uppercase tracking-wider mb-2 px-2 font-mono">Boards</div>
 
-          <NavLink
-            to="/boards/new"
-            className={({ isActive }) =>
-              `w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl text-sm transition cursor-pointer ${isActive ? 'bg-slate-800 text-white font-semibold' : 'text-slate-100 hover:bg-slate-800/60 hover:text-white font-medium'}`
-            }
+          <Link
+            href="/boards/new"
+            className={`w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl text-sm transition cursor-pointer ${isActive('/boards/new') ? 'bg-slate-800 text-white font-semibold' : 'text-slate-100 hover:bg-slate-800/60 hover:text-white font-medium'}`}
           >
             <Plus className="w-4 h-4 text-indigo-400" />
             <span>Board Management</span>
-          </NavLink>
+          </Link>
 
-          <NavLink
-            to="/focus"
-            className={({ isActive }) =>
-              `w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl text-sm transition cursor-pointer ${isActive ? 'bg-slate-800 text-white font-semibold' : 'text-slate-100 hover:bg-slate-800/60 hover:text-white font-medium'}`
-            }
+          <Link
+            href="/focus"
+            className={`w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl text-sm transition cursor-pointer ${isActive('/focus') ? 'bg-slate-800 text-white font-semibold' : 'text-slate-100 hover:bg-slate-800/60 hover:text-white font-medium'}`}
           >
             <Timer className="w-4 h-4 text-emerald-400" />
             <span>Focus Timer</span>
-          </NavLink>
+          </Link>
 
           <div className="mt-3 mb-1 border-t border-slate-800/60" />
 
@@ -89,22 +89,19 @@ export const Sidebar = () => {
             <p className="text-xs text-slate-300 px-2 italic">No active environments.</p>
           ) : (
             <div className="space-y-1.5">
-              {userBoards.map((b) => (
-                <NavLink
-                  key={b.boardId}
-                  to={`/boards/${b.boardId}`}
-                  className={({ isActive }) =>
-                    `w-full flex items-center gap-3 px-3 py-2.5 text-left rounded-xl text-sm transition cursor-pointer truncate ${isActive ? 'bg-slate-800 text-white font-semibold' : 'text-slate-100 hover:bg-slate-800/60 hover:text-white font-medium'}`
-                  }
-                >
-                  {({ isActive }) => (
-                    <>
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${isActive ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'}`} />
-                      <span className="truncate">{b.name}</span>
-                    </>
-                  )}
-                </NavLink>
-              ))}
+              {userBoards.map((b) => {
+                const boardActive = pathname === `/boards/${b.boardId}`;
+                return (
+                  <Link
+                    key={b.boardId}
+                    href={`/boards/${b.boardId}`}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-left rounded-xl text-sm transition cursor-pointer truncate ${boardActive ? 'bg-slate-800 text-white font-semibold' : 'text-slate-100 hover:bg-slate-800/60 hover:text-white font-medium'}`}
+                  >
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${boardActive ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'}`} />
+                    <span className="truncate">{b.name}</span>
+                  </Link>
+                );
+              })}
             </div>
           )}
         </nav>

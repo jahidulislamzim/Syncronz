@@ -1,13 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { db } from '../lib/firebase.js';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { KanbanBoard } from '../components/KanbanBoard.jsx';
-import { MembersRoster } from '../components/MembersRoster.jsx';
-import { ActivityLog } from '../components/ActivityLog.jsx';
-import { BoardDetailSkeleton } from '../components/PageLoader.jsx';
+'use client';
 
-export const BoardDetail = () => {
+import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
+import { db } from '../../../../src/lib/firebase.js';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { KanbanBoard } from '../../../../src/components/KanbanBoard.jsx';
+import { MembersRoster } from '../../../../src/components/MembersRoster.jsx';
+import { ActivityLog } from '../../../../src/components/ActivityLog.jsx';
+import { BoardDetailSkeleton } from '../../../../src/components/PageLoader.jsx';
+
+export default function BoardDetail() {
   const { boardId } = useParams();
   const [board, setBoard] = useState(null);
 
@@ -35,4 +37,4 @@ export const BoardDetail = () => {
       </div>
     </div>
   );
-};
+}

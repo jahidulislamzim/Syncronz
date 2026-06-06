@@ -1,15 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
-import { db } from '../lib/firebase.js';
-import { collection, query, onSnapshot } from 'firebase/firestore';
-import { createBoard, joinBoard, getAllUsers } from '../lib/services.js';
-import { Plus, LogIn, LayoutDashboard, Search, X, UserPlus, Users, Crown, ArrowRight } from 'lucide-react';
-import { BoardManagementSkeleton } from '../components/PageLoader.jsx';
+'use client';
 
-export const BoardManagement = () => {
+import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '../../../../src/context/AuthContext.jsx';
+import { db } from '../../../../src/lib/firebase.js';
+import { collection, query, onSnapshot } from 'firebase/firestore';
+import { createBoard, joinBoard, getAllUsers } from '../../../../src/lib/services.js';
+import { Plus, LogIn, LayoutDashboard, Search, X, UserPlus, Users, Crown, ArrowRight } from 'lucide-react';
+import { BoardManagementSkeleton } from '../../../../src/components/PageLoader.jsx';
+
+export default function BoardManagement() {
   const { user, profile, adminEmail } = useAuth();
-  const navigate = useNavigate();
+  const navigate = useRouter();
 
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
@@ -103,7 +105,7 @@ export const BoardManagement = () => {
             photoURL: m.photoURL
           });
         }
-        navigate(`/boards/${bId}`);
+        navigate.push(`/boards/${bId}`);
       }
     } catch {}
     setCreateSubmitting(false);
@@ -122,7 +124,7 @@ export const BoardManagement = () => {
         photoURL: profile?.photoURL || user.photoURL || 'https://api.dicebear.com/7.x/initials/svg?seed=user'
       };
       await joinBoard(joinId.trim(), memberDetails);
-      navigate(`/boards/${joinId.trim()}`);
+      navigate.push(`/boards/${joinId.trim()}`);
     } catch {
       setJoinError('Board not found or permissions mismatch.');
     }
@@ -158,7 +160,6 @@ export const BoardManagement = () => {
         </div>
       </div>
 
-      {/* Stats Section */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
           <div className="flex items-center gap-3">
@@ -202,7 +203,6 @@ export const BoardManagement = () => {
         )}
       </div>
 
-      {/* Create / Join Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden">
           <div className="h-1.5 bg-gradient-to-r from-blue-500 to-blue-600" />
@@ -348,4 +348,4 @@ export const BoardManagement = () => {
       </div>
     </div>
   );
-};
+}

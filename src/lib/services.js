@@ -47,7 +47,7 @@ export async function createUserProfile(uid, displayName, photoURL, email) {
     }
 
     const lowercaseEmail = email.toLowerCase();
-    const envAdminEmail = (import.meta.env?.VITE_ADMIN_EMAIL || '').toLowerCase();
+    const envAdminEmail = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase();
     const shouldBeAdmin = envAdminEmail && lowercaseEmail === envAdminEmail;
     
     if (isOffline) {
@@ -169,7 +169,7 @@ export async function getAdminEmail() {
       return docSnap.data().email || null;
     }
   } catch (_) {}
-  return import.meta.env.VITE_ADMIN_EMAIL || null;
+  return process.env.NEXT_PUBLIC_ADMIN_EMAIL || null;
 }
 
 export async function createBoard(name, description, creatorId, creatorProfile) {

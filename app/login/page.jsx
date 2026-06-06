@@ -1,14 +1,24 @@
-import React from 'react';
-import { Navigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '../../src/context/AuthContext.jsx';
 import { Sparkles, Landmark, ShieldCheck } from 'lucide-react';
 
-export const LoginPage = () => {
+export default function LoginPage() {
   const { user, isAllowed, signIn, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading) {
+      if (user && isAllowed) router.replace('/');
+      else if (user && !isAllowed) router.replace('/access-denied');
+    }
+  }, [user, isAllowed, loading, router]);
 
   if (loading) return null;
-  if (user && isAllowed) return <Navigate to="/" replace />;
-  if (user && !isAllowed) return <Navigate to="/access-denied" replace />;
+  if (user) return null;
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row items-stretch justify-stretch overflow-hidden">
       <div className="flex-1 bg-slate-900 text-white p-8 lg:p-16 flex flex-col justify-between relative overflow-hidden">
@@ -65,4 +75,4 @@ export const LoginPage = () => {
       </div>
     </div>
   );
-};
+}
