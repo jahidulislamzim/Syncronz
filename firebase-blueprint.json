@@ -1,0 +1,123 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Public profile of an active user.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique user ID matching Firebase Auth." },
+        "displayName": { "type": "string", "description": "User's display name." },
+        "photoURL": { "type": "string", "description": "Profile picture URL." },
+        "lastActive": { "type": "string", "format": "date-time", "description": "Timestamp of last interaction status." }
+      },
+      "required": ["uid", "displayName"]
+    },
+    "Board": {
+      "title": "Board",
+      "description": "A collaborative task board which groups tasks and members.",
+      "type": "object",
+      "properties": {
+        "boardId": { "type": "string", "description": "Unique ID of the board." },
+        "name": { "type": "string", "description": "Name of the board." },
+        "description": { "type": "string", "description": "Description of the board." },
+        "creatorId": { "type": "string", "description": "User ID of the board creator." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Board creation timestamp." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last updated timestamp." }
+      },
+      "required": ["boardId", "name", "creatorId", "createdAt", "updatedAt"]
+    },
+    "BoardMember": {
+      "title": "BoardMember",
+      "description": "A participant in a collaborative board.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase UID of the member." },
+        "email": { "type": "string", "description": "Email address of the member." },
+        "displayName": { "type": "string", "description": "Display name of the member." },
+        "photoURL": { "type": "string", "description": "Photo URL of the member." },
+        "role": { "type": "string", "enum": ["owner", "member"], "description": "Collaboration role on this board." },
+        "joinedAt": { "type": "string", "format": "date-time", "description": "Timestamp when user joined the board." }
+      },
+      "required": ["uid", "email", "displayName", "role", "joinedAt"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "An action item or task within a board.",
+      "type": "object",
+      "properties": {
+        "taskId": { "type": "string", "description": "Unique ID of the task." },
+        "boardId": { "type": "string", "description": "Id of the board this task belongs to." },
+        "title": { "type": "string", "description": "Title of the task." },
+        "description": { "type": "string", "description": "Description of the task." },
+        "status": { "type": "string", "enum": ["todo", "in_progress", "review", "done"], "description": "Current workflow status." },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"], "description": "Task urgency tier." },
+        "dueDate": { "type": "string", "description": "ISO date string or timestamp for task due date." },
+        "assigneeId": { "type": "string", "description": "UID of assignee user (optional)." },
+        "assigneeName": { "type": "string", "description": "Cached display name of assignee user (optional)." },
+        "assigneePhoto": { "type": "string", "description": "Cached photo URL of assignee user (optional)." },
+        "creatorId": { "type": "string", "description": "UID of the task creator." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Task creation timestamp." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Timestamp when task was last modified." }
+      },
+      "required": ["taskId", "boardId", "title", "status", "priority", "creatorId", "createdAt", "updatedAt"]
+    },
+    "BoardActivity": {
+      "title": "BoardActivity",
+      "description": "Audit and feed log of activity taking place on the board.",
+      "type": "object",
+      "properties": {
+        "activityId": { "type": "string", "description": "Unique ID of the activity entry." },
+        "type": { "type": "string", "enum": ["task_created", "task_updated", "task_moved", "task_assigned", "board_joined", "comment_added"], "description": "Action type identifier." },
+        "userId": { "type": "string", "description": "UID of the active user." },
+        "userName": { "type": "string", "description": "Name of the active user." },
+        "userPhoto": { "type": "string", "description": "Photo of the active user." },
+        "details": { "type": "string", "description": "Descriptive text of what occured." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Event timestamp." }
+      },
+      "required": ["activityId", "type", "userId", "userName", "details", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "User notification details for live in-app/push sync.",
+      "type": "object",
+      "properties": {
+        "notificationId": { "type": "string", "description": "Unique notification ID." },
+        "boardId": { "type": "string", "description": "ID of the referenced board." },
+        "boardName": { "type": "string", "description": "Name of the board." },
+        "taskId": { "type": "string", "description": "ID of the referenced task (optional)." },
+        "title": { "type": "string", "description": "Notification heading." },
+        "message": { "type": "string", "description": "Content of notification." },
+        "read": { "type": "boolean", "description": "Read / Unread status of notification." },
+        "type": { "type": "string", "enum": ["assignment", "update", "comment", "mention", "joined"], "description": "Classification." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Notification delivery timestamp." }
+      },
+      "required": ["notificationId", "boardId", "boardName", "title", "message", "read", "type", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Active user profiles."
+    },
+    "boards/{boardId}": {
+      "schema": "Board",
+      "description": "Collaborative task management boards."
+    },
+    "boards/{boardId}/members/{memberId}": {
+      "schema": "BoardMember",
+      "description": "List of collaborative members joined to a board."
+    },
+    "boards/{boardId}/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Task cards inside a specific board."
+    },
+    "boards/{boardId}/activity/{activityId}": {
+      "schema": "BoardActivity",
+      "description": "Live audit logs and notifications for board activity."
+    },
+    "users/{userId}/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "User specific push notifications and system messages."
+    }
+  }
+}
