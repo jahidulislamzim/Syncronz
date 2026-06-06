@@ -180,15 +180,15 @@ export default function ManageUsers() {
   }
 
   return (
-      <div className="max-w-5xl mx-auto w-full py-8 space-y-8">
+    <div className="max-w-5xl mx-auto w-full px-4 py-6 md:py-8 space-y-6 md:space-y-8">
       <AnimatePresence>
         {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       </AnimatePresence>
 
-      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl p-8 md:p-10">
+      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl p-6 sm:p-8 md:p-10">
         <div className="absolute top-[-30%] right-[-10%] w-[50%] h-[50%] bg-indigo-500/15 rounded-full blur-[100px] pointer-events-none" />
         <div className="absolute bottom-[-30%] left-[-10%] w-[50%] h-[50%] bg-emerald-500/10 rounded-full blur-[100px] pointer-events-none" />
-        <div className="relative z-10 flex items-start gap-5">
+        <div className="relative z-10 flex flex-col sm:flex-row items-start gap-4 sm:gap-5">
           <div className="h-12 w-12 bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-black/10">
             <ShieldCheck className="h-5.5 w-5.5 text-indigo-300" />
           </div>
@@ -203,7 +203,7 @@ export default function ManageUsers() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-indigo-50 rounded-xl"><Users className="w-5 h-5 text-indigo-600" /></div>
@@ -235,72 +235,73 @@ export default function ManageUsers() {
 
       <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
         <div className="h-1 bg-gradient-to-r from-indigo-500 to-emerald-500" />
-        <div className="flex items-center gap-1 p-1.5">
-        <button
-          onClick={() => { setActiveTab('invite'); setSearchQuery(''); }}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition cursor-pointer ${
-            activeTab === 'invite'
-              ? 'bg-slate-900 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <UserPlus className="w-4 h-4" />
-          Invite
-          {pendingCount > 0 && (
-            <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-              activeTab === 'invite' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'
-            }`}>
-              {pendingCount}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() => { setActiveTab('members'); setSearchQuery(''); }}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition cursor-pointer ${
-            activeTab === 'members'
-              ? 'bg-slate-900 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          Members
-          {memberUsers.length > 0 && (
-            <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-              activeTab === 'members' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
-            }`}>
-              {memberUsers.length}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() => { setActiveTab('admin'); setSearchQuery(''); }}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition cursor-pointer ${
-            activeTab === 'admin'
-              ? 'bg-slate-900 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <ShieldCheck className="w-4 h-4" />
-          Admin
-          {adminUsers.length > 0 && (
-            <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-              activeTab === 'admin' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-800'
-            }`}>
-              {adminUsers.length}
-            </span>
-          )}
-        </button>
-        <div className="flex-1" />
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder={`Search ${activeTab === 'invite' ? 'invitations' : activeTab === 'admin' ? 'admins' : 'members'}...`}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 w-56 transition"
-          />
-        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3">
+          <div className="flex items-center gap-1 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 scroll-smooth">
+            <button
+              onClick={() => { setActiveTab('invite'); setSearchQuery(''); }}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition cursor-pointer shrink-0 ${
+                activeTab === 'invite'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <UserPlus className="w-4 h-4" />
+              Invite
+              {pendingCount > 0 && (
+                <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'invite' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => { setActiveTab('members'); setSearchQuery(''); }}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition cursor-pointer shrink-0 ${
+                activeTab === 'members'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              Members
+              {memberUsers.length > 0 && (
+                <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'members' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                }`}>
+                  {memberUsers.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => { setActiveTab('admin'); setSearchQuery(''); }}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition cursor-pointer shrink-0 ${
+                activeTab === 'admin'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4" />
+              Admin
+              {adminUsers.length > 0 && (
+                <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === 'admin' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-800'
+                }`}>
+                  {adminUsers.length}
+                </span>
+              )}
+            </button>
+          </div>
+          <div className="relative w-full sm:w-auto">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder={`Search ${activeTab === 'invite' ? 'invitations' : activeTab === 'admin' ? 'admins' : 'members'}...`}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 w-full sm:w-56 transition"
+            />
+          </div>
         </div>
       </div>
 
@@ -312,8 +313,8 @@ export default function ManageUsers() {
               <p className="text-sm text-slate-500 mt-0.5">Only invited email addresses can sign in with Google</p>
             </div>
             <div className="p-6">
-              <div className="flex gap-3">
-                <div className="flex-1 space-y-2">
+              <div className="flex flex-col md:flex-row items-stretch md:items-start gap-3">
+                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <input
                     type="email"
                     value={inviteEmail}
@@ -334,7 +335,7 @@ export default function ManageUsers() {
                 <button
                   onClick={handleInvite}
                   disabled={inviting || !inviteEmail.trim() || !isValidEmail(inviteEmail.trim())}
-                  className="self-start px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition flex items-center gap-2 cursor-pointer shadow-sm shadow-emerald-600/10"
+                  className="w-full md:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-emerald-600/10 shrink-0 h-[46px]"
                 >
                   {inviting ? (
                     <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -371,8 +372,8 @@ export default function ManageUsers() {
             ) : (
               <div className="divide-y divide-slate-100">
                 {filteredInvited.map((inv) => (
-                  <div key={inv.email} className="flex items-center justify-between px-6 py-4 hover:bg-slate-50/50 transition">
-                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                  <div key={inv.email} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:px-6 sm:py-4 gap-3 hover:bg-slate-50/50 transition">
+                    <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 ${
                         inv.status === 'accepted' ? 'bg-emerald-50 text-emerald-700' :
                         inv.status === 'pending' ? 'bg-amber-50 text-amber-700' :
@@ -380,8 +381,8 @@ export default function ManageUsers() {
                       }`}>
                         {inv.email.charAt(0).toUpperCase()}
                       </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="text-sm font-semibold text-slate-900 truncate">{inv.displayName || 'No name'}</span>
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                             inv.status === 'accepted' ? 'bg-emerald-50 text-emerald-700' :
@@ -391,11 +392,11 @@ export default function ManageUsers() {
                             {inv.status === 'accepted' ? 'Active' : inv.status === 'pending' ? 'Pending' : 'Revoked'}
                           </span>
                         </div>
-                        <p className="text-sm text-slate-500 font-mono truncate mt-0.5">{inv.email}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">Invited {formatDate(inv.invitedAt)}</p>
+                        <p className="text-xs sm:text-sm text-slate-500 font-mono truncate mt-0.5" title={inv.email}>{inv.email}</p>
+                        <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">Invited {formatDate(inv.invitedAt)}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0 justify-end pl-[52px] sm:pl-0 border-t border-slate-100 sm:border-t-0 pt-2 sm:pt-0">
                       <button
                         onClick={() => {
                           navigator.clipboard.writeText(inv.email);
@@ -460,22 +461,22 @@ export default function ManageUsers() {
           ) : (
             <div className="divide-y divide-slate-100">
               {(searchQuery ? filteredUsers.filter(u => !u.isAdmin && !isSuperAdmin(u)) : memberUsers).map((u) => (
-                <div key={u.uid} className="flex items-center justify-between px-6 py-4 hover:bg-slate-50/50 transition">
-                  <div className="flex items-center gap-4 min-w-0 flex-1">
+                <div key={u.uid} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:px-6 sm:py-4 gap-3 hover:bg-slate-50/50 transition">
+                  <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
                     <img
                       src={u.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(u.displayName || u.uid)}`}
                       alt={u.displayName}
                       className="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0"
                     />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-semibold text-slate-900 truncate">{u.displayName}</span>
                         {u.uid === user?.uid && <span className="text-[10px] text-slate-400 font-mono">(you)</span>}
                       </div>
-                      <p className="text-sm text-slate-500 font-mono truncate mt-0.5">{u.email || 'No email'}</p>
+                      <p className="text-xs sm:text-sm text-slate-500 font-mono truncate mt-0.5" title={u.email}>{u.email || 'No email'}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0 pl-[52px] sm:pl-0 border-t border-slate-100 sm:border-t-0 pt-3 sm:pt-0 justify-start sm:justify-end">
                     {u.uid !== user?.uid && (
                       <button
                         onClick={async () => {
@@ -561,15 +562,15 @@ export default function ManageUsers() {
               {(searchQuery ? filteredUsers.filter(u => u.isAdmin || isSuperAdmin(u)) : adminUsers).map((u) => {
                 const superAdmin = isSuperAdmin(u);
                 return (
-                  <div key={u.uid} className="flex items-center justify-between px-6 py-4 hover:bg-slate-50/50 transition">
-                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                  <div key={u.uid} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:px-6 sm:py-4 gap-3 hover:bg-slate-50/50 transition">
+                    <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
                       <img
                         src={u.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(u.displayName || u.uid)}`}
                         alt={u.displayName}
                         className="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0"
                       />
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="text-sm font-semibold text-slate-900 truncate">{u.displayName}</span>
                           {u.uid === user?.uid && <span className="text-[10px] text-slate-400 font-mono">(you)</span>}
                           {superAdmin ? (
@@ -582,13 +583,13 @@ export default function ManageUsers() {
                             </span>
                           )}
                         </div>
-                        <p className="text-sm text-slate-500 font-mono truncate mt-0.5">{u.email || 'No email'}</p>
+                        <p className="text-xs sm:text-sm text-slate-500 font-mono truncate mt-0.5" title={u.email}>{u.email || 'No email'}</p>
                         {!superAdmin && u.isAdmin && (
-                          <p className="text-xs text-slate-400 mt-0.5">Promoted by workspace admin</p>
+                          <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">Promoted by workspace admin</p>
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0 pl-[52px] sm:pl-0 border-t border-slate-100 sm:border-t-0 pt-3 sm:pt-0 justify-start sm:justify-end">
                       {u.uid !== user?.uid && !superAdmin && (
                         <button
                           onClick={async () => {
