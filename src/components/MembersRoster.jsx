@@ -121,8 +121,8 @@ export const MembersRoster = ({ boardId, creatorId }) => {
   };
 
   return (
-    <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
-      <div className="h-1 bg-gradient-to-r from-indigo-500 to-purple-500" />
+    <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm">
+      <div className="h-1 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-t-2xl" />
       <div className="p-5 space-y-5">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold text-slate-400 tracking-wider uppercase flex items-center space-x-1.5">
@@ -148,45 +148,7 @@ export const MembersRoster = ({ boardId, creatorId }) => {
           </button>
         </div>
 
-      <div className="space-y-3.5 max-h-[220px] overflow-y-auto pr-1 subtle-scroll">
-        {members.map((member) => {
-          const fullUser = systemUsers.find((u) => u.uid === member.uid);
-          const online = isUserOnline(fullUser?.lastActive || member.joinedAt);
-
-          return (
-            <div key={member.uid} className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="relative">
-                  <img
-                    src={member.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(member.displayName)}`}
-                    alt={member.displayName}
-                    referrerPolicy="no-referrer"
-                    className="w-8 h-8 rounded-lg object-cover bg-slate-100 border border-slate-200/50"
-                  />
-                  <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${online ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-slate-800 leading-none truncate max-w-[130px]">{member.displayName}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5 font-mono truncate max-w-[130px]">{member.email}</p>
-                </div>
-              </div>
-
-              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md font-mono flex items-center space-x-1 ${member.role === MemberRole.OWNER ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}>
-                {member.role === MemberRole.OWNER ? (
-                  <>
-                    <Shield className="h-2.5 w-2.5" />
-                    <span>Owner</span>
-                  </>
-                ) : (
-                  <span>Collab</span>
-                )}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      <form onSubmit={handleSubmit} className="pt-4 border-t border-slate-100 space-y-2 relative">
+      <form onSubmit={handleSubmit} className="space-y-2 relative">
         <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center space-x-1">
           <UserPlus className="h-3 w-3" />
           <span>Add Team Member</span>
@@ -234,13 +196,13 @@ export const MembersRoster = ({ boardId, creatorId }) => {
           </div>
 
           {showDropdown && filteredUsers.length > 0 && (
-            <div className="absolute top-full left-0 right-[72px] mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto">
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-36 overflow-y-auto">
               {filteredUsers.map((u) => (
                 <button
                   key={u.uid}
                   type="button"
                   onClick={() => handleSelect(u)}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition text-left cursor-pointer border-b border-slate-50 last:border-0"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition text-left cursor-pointer border-b border-slate-100 last:border-0"
                 >
                   <img
                     src={u.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(u.displayName || u.uid)}`}
@@ -258,13 +220,51 @@ export const MembersRoster = ({ boardId, creatorId }) => {
           )}
 
           {showDropdown && query.trim() && filteredUsers.length === 0 && (
-            <div className="absolute top-full left-0 right-[72px] mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-4 text-center">
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-3 text-center">
               <p className="text-xs text-slate-500">No registered users match "{query}"</p>
               <p className="text-[10px] text-slate-400 mt-1">Only users who have signed in can be added</p>
             </div>
           )}
         </div>
       </form>
+
+      <div className="pt-4 border-t border-slate-100 space-y-3.5 max-h-[220px] overflow-y-auto pr-1 subtle-scroll">
+        {members.map((member) => {
+          const fullUser = systemUsers.find((u) => u.uid === member.uid);
+          const online = isUserOnline(fullUser?.lastActive || member.joinedAt);
+
+          return (
+            <div key={member.uid} className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="relative">
+                  <img
+                    src={member.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(member.displayName)}`}
+                    alt={member.displayName}
+                    referrerPolicy="no-referrer"
+                    className="w-8 h-8 rounded-lg object-cover bg-slate-100 border border-slate-200/50"
+                  />
+                  <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${online ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-800 leading-none truncate max-w-[130px]">{member.displayName}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5 font-mono truncate max-w-[130px]">{member.email}</p>
+                </div>
+              </div>
+
+              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md font-mono flex items-center space-x-1 ${member.role === MemberRole.OWNER ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}>
+                {member.role === MemberRole.OWNER ? (
+                  <>
+                    <Shield className="h-2.5 w-2.5" />
+                    <span>Owner</span>
+                  </>
+                ) : (
+                  <span>Collab</span>
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </div>
       </div>
     </div>
   );
