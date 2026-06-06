@@ -3,8 +3,6 @@ import { verifyFirebaseToken } from '../../../src/lib/firebase/auth.js';
 import { readDocument } from '../../../src/lib/firebase/firestore.js';
 import { sendInviteEmail } from '../../../src/lib/email.js';
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-
 export async function POST(request) {
   try {
     const authHeader = request.headers.get('Authorization');
@@ -26,12 +24,15 @@ export async function POST(request) {
       return NextResponse.json({ error: 'SMTP not configured' }, { status: 400 });
     }
 
+    const origin = request.headers.get('origin') || new URL(request.url).origin;
+    const inviteLink = `${origin}/login`;
+
     await sendInviteEmail({
       smtpConfig,
       to: email,
       displayName: displayName || '',
       adminName: adminName || tokenUser.email || 'An admin',
-      inviteLink: `${BASE_URL}/login`,
+      inviteLink,
     });
 
     return NextResponse.json({ success: true });
