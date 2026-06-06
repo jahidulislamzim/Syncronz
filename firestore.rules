@@ -2,71 +2,75 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper function to check if the user is a member of the board
-    function isBoardMember(boardId) {
-      return request.auth != null && exists(/databases/$(database)/documents/boards/$(boardId)/members/$(request.auth.uid));
+    // Helper function to check if the user exists in users and is authorized
+    function isAuthorized() {
+      return request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAuthorized == true;
+    }
+
+    // Helper function to check if the user is an admin
+    function isAdmin() {
+      return request.auth != null && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true) ||
+        (exists(/databases/$(database)/documents/settings/admin) && 
+         get(/databases/$(database)/documents/settings/admin).data.email == request.auth.token.email)
+      );
     }
 
     // User Profile Rules
     match /users/{userId} {
       // Any authenticated user can read profiles (to show member names/avatars)
       allow read: if request.auth != null;
-      // Only the user themselves can write their own profile
-      allow write: if request.auth != null && request.auth.uid == userId;
+      // Any authenticated user can create their own profile document
+      allow create: if request.auth != null && request.auth.uid == userId;
+      // Owners can update their own profile fields except isAdmin and isAuthorized. Authorized users can update any profile.
+      allow update: if request.auth != null && (
+        (request.auth.uid == userId && 
+         request.resource.data.get('isAdmin', false) == resource.data.get('isAdmin', false) && 
+         request.resource.data.get('isAuthorized', true) == resource.data.get('isAuthorized', true)) ||
+        isAuthorized()
+      );
+      // Owners or authorized users can delete a profile
+      allow delete: if request.auth != null && (request.auth.uid == userId || isAuthorized());
 
       // User's private notifications
       match /notifications/{notificationId} {
-        // Only the user can read/delete their notifications
         allow read, delete: if request.auth != null && request.auth.uid == userId;
-        // Any authenticated user can create a notification for this user (e.g. for assignments, comments, etc.)
         allow create: if request.auth != null;
       }
 
       // User's focus sessions
       match /focusSessions/{sessionId} {
-        // Only the user can read/write their focus sessions
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
     }
 
-    // Board Rules
+    // Board Rules & Subcollections (boards, members, tasks, activity)
     match /boards/{boardId} {
-      // Allow authenticated users to read/get board info (needed for joining/viewing)
-      allow read: if request.auth != null;
-      // Allow any authenticated user to create a board, as long as they set themselves as the creator
-      allow create: if request.auth != null && request.resource.data.creatorId == request.auth.uid;
-      // Only board members can update or delete the board
-      allow update, delete: if isBoardMember(boardId);
-
-      // Board Members subcollection
-      match /members/{memberId} {
-        // Anyone authenticated can read member list, or create their own membership (to join)
-        allow read: if request.auth != null;
-        allow create: if request.auth != null && (request.auth.uid == memberId || isBoardMember(boardId));
-        // Only existing board members can update/delete member roles
-        allow update, delete: if isBoardMember(boardId);
-      }
-
-      // Tasks subcollection - only accessible by board members
-      match /tasks/{taskId} {
-        allow read, write: if isBoardMember(boardId);
-      }
-
-      // Activity subcollection - only accessible by board members
-      match /activity/{activityId} {
-        allow read, write: if isBoardMember(boardId);
+      allow read, write: if isAuthorized();
+      
+      match /{allChildren=**} {
+        allow read, write: if isAuthorized();
       }
     }
 
     // Settings collection
     match /settings/{settingId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow write: if isAuthorized() && isAdmin();
     }
 
     // Invited Users collection
     match /invited_users/{email} {
-      allow read, write: if request.auth != null;
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && (isAuthorized() || request.auth.token.email.lower() == email);
+    }
+
+    // Test collection for database connection validation
+    match /test/connection {
+      allow read: if true;
     }
   }
 }

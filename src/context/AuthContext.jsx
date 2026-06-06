@@ -53,17 +53,28 @@ export const AuthProvider = ({ children }) => {
         const emailLower = firebaseUser.email?.toLowerCase();
 
         let allowed = false;
+        let isSuperAdmin = false;
+        if (emailLower && resolvedAdmin && emailLower === resolvedAdmin.toLowerCase()) {
+          isSuperAdmin = true;
+        }
+
+        let dbProfile = null;
 
         if (emailLower) {
-          if (resolvedAdmin && emailLower === resolvedAdmin.toLowerCase()) {
-            allowed = true;
-          } else {
-            const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-            const existingProfile = userDoc.exists() ? userDoc.data() : null;
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          dbProfile = userDoc.exists() ? userDoc.data() : null;
 
-            if (existingProfile?.isAuthorized) {
+          if (dbProfile) {
+            // Case 1: User exists in the users table
+            if (dbProfile.isAuthorized || dbProfile.isAdmin || isSuperAdmin) {
+              allowed = true;
+            }
+          } else {
+            // Case 2: User is not found in the users table
+            if (isSuperAdmin) {
               allowed = true;
             } else {
+              // Check invited user table
               const inviteDoc = await getDoc(doc(db, 'invited_users', emailLower));
               if (inviteDoc.exists()) {
                 const data = inviteDoc.data();
@@ -95,7 +106,7 @@ export const AuthProvider = ({ children }) => {
           displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
           photoURL: firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(firebaseUser.uid)}`,
           lastActive: new Date().toISOString(),
-          isAdmin: !!(resolvedAdmin && firebaseUser.email?.toLowerCase() === resolvedAdmin.toLowerCase())
+          isAdmin: isSuperAdmin || !!dbProfile?.isAdmin
         });
         setIsAllowed(true);
       } catch {
