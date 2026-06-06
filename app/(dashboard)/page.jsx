@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../src/context/AuthContext.jsx';
-import { db } from '../../src/lib/firebase.js';
+import { db } from '../../src/lib/firebase/client.js';
 import { collection, query, onSnapshot } from 'firebase/firestore';
-import { getAllUsers, getInvitedUsers } from '../../src/lib/services.js';
+import { getAllUsers, getInvitedUsers } from '../../src/lib/firebase/firestore.js';
 import { Sparkles, LayoutDashboard, Users, ShieldCheck, ArrowRight, Crown, CheckCircle, Clock, RefreshCw, Plus } from 'lucide-react';
 import { DashboardSkeleton } from '../../src/components/PageLoader.jsx';
 
@@ -28,7 +28,8 @@ export default function DashboardHome() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list = [];
       snapshot.forEach(docSnap => {
-        list.push(docSnap.data());
+        const data = docSnap.data();
+        if (data.boardId) list.push(data);
       });
       setAllBoards(list);
     });
@@ -172,9 +173,9 @@ export default function DashboardHome() {
                 {allBoards.length === 0 ? (
                   <div className="p-8 text-center text-sm text-slate-400">No boards created yet.</div>
                 ) : (
-                  allBoards.map(board => (
+                  allBoards.map((board, idx) => (
                     <div
-                      key={board.boardId}
+                      key={board.boardId || `db-board-${idx}`}
                       onClick={() => navigate.push(`/boards/${board.boardId}`)}
                       className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50/50 transition cursor-pointer"
                     >

@@ -1,33 +1,36 @@
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  getDocs, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
-  where, 
-  orderBy, 
-  onSnapshot, 
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
   serverTimestamp,
   arrayUnion,
   arrayRemove
 } from 'firebase/firestore';
-import { db, handleFirestoreError } from './firebase';
-import { 
-  TaskStatus, 
-  TaskPriority, 
-  MemberRole, 
-  ActivityType, 
-  NotificationType, 
+import { db } from './client.js';
+import { handleFirestoreError } from './auth.js';
+import {
+  TaskStatus,
+  TaskPriority,
+  MemberRole,
+  ActivityType,
+  NotificationType,
   OperationType,
-} from '../types';
+} from '../../types.js';
 
+// ─── ID Generation ───────────────────────────────────────────────
 export function generateId() {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
+// ─── User Profile ────────────────────────────────────────────────
 export async function createUserProfile(uid, displayName, photoURL, email) {
   const path = `users/${uid}`;
   try {
@@ -49,7 +52,7 @@ export async function createUserProfile(uid, displayName, photoURL, email) {
     const lowercaseEmail = email.toLowerCase();
     const envAdminEmail = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase();
     const shouldBeAdmin = envAdminEmail && lowercaseEmail === envAdminEmail;
-    
+
     if (isOffline) {
       await setDoc(userDocRef, {
         uid,
@@ -140,6 +143,15 @@ export async function getAllUsers() {
   }
 }
 
+export async function deleteUserProfile(uid) {
+  try {
+    await deleteDoc(doc(db, 'users', uid));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `users/${uid}`);
+  }
+}
+
+// ─── Invitations ─────────────────────────────────────────────────
 export async function inviteUser(email, invitedByUid, displayName) {
   const emailLower = email.toLowerCase().trim();
   const inviteRef = doc(db, 'invited_users', emailLower);
@@ -172,10 +184,11 @@ export async function getAdminEmail() {
   return process.env.NEXT_PUBLIC_ADMIN_EMAIL || null;
 }
 
+// ─── Boards ──────────────────────────────────────────────────────
 export async function createBoard(name, description, creatorId, creatorProfile) {
   const boardId = 'board_' + generateId();
   const boardPath = `boards/${boardId}`;
-  
+
   try {
     const boardDocRef = doc(db, 'boards', boardId);
     const now = serverTimestamp();
@@ -225,11 +238,7 @@ export async function getBoards() {
   }
 }
 
-export async function joinBoard(
-  boardId, 
-  user, 
-  role = MemberRole.MEMBER
-) {
+export async function joinBoard(boardId, user, role = MemberRole.MEMBER) {
   const path = `boards/${boardId}/members/${user.uid}`;
   try {
     const boardDoc = await getDoc(doc(db, 'boards', boardId));
@@ -287,7 +296,7 @@ export async function leaveBoard(boardId, userId, userName, userPhoto) {
   const path = `boards/${boardId}/members/${userId}`;
   try {
     await deleteDoc(doc(db, 'boards', boardId, 'members', userId));
-    
+
     await addActivityLog(
       boardId,
       ActivityType.BOARD_JOINED,
@@ -303,21 +312,14 @@ export async function leaveBoard(boardId, userId, userName, userPhoto) {
   }
 }
 
-export async function createTask(
-  boardId,
-  title,
-  description,
-  priority,
-  dueDate,
-  assignee,
-  creator
-) {
+// ─── Tasks ───────────────────────────────────────────────────────
+export async function createTask(boardId, title, description, priority, dueDate, assignee, creator) {
   const taskId = 'task_' + generateId();
   const path = `boards/${boardId}/tasks/${taskId}`;
   try {
     const taskRef = doc(db, 'boards', boardId, 'tasks', taskId);
     const now = serverTimestamp();
-    
+
     await setDoc(taskRef, {
       taskId,
       boardId,
@@ -346,7 +348,7 @@ export async function createTask(
     if (assignee && assignee.uid !== creator.uid) {
       const boardDoc = await getDoc(doc(db, 'boards', boardId));
       const boardName = boardDoc.exists() ? boardDoc.data().name : 'Project Board';
-      
+
       await addNotification(
         assignee.uid,
         boardId,
@@ -364,18 +366,13 @@ export async function createTask(
   }
 }
 
-export async function updateTaskStatus(
-  boardId,
-  taskId,
-  newStatus,
-  user
-) {
+export async function updateTaskStatus(boardId, taskId, newStatus, user) {
   const path = `boards/${boardId}/tasks/${taskId}`;
   try {
     const taskRef = doc(db, 'boards', boardId, 'tasks', taskId);
     const taskSnap = await getDoc(taskRef);
     if (!taskSnap.exists()) return;
-    
+
     const oldStatus = taskSnap.data().status;
     if (oldStatus === newStatus) return;
 
@@ -424,12 +421,7 @@ export async function updateTaskStatus(
   }
 }
 
-export async function updateTaskDetails(
-  boardId,
-  taskId,
-  fields,
-  user
-) {
+export async function updateTaskDetails(boardId, taskId, fields, user) {
   const path = `boards/${boardId}/tasks/${taskId}`;
   try {
     const taskRef = doc(db, 'boards', boardId, 'tasks', taskId);
@@ -510,14 +502,8 @@ export async function deleteTask(boardId, taskId, user) {
   }
 }
 
-export async function addActivityLog(
-  boardId,
-  type,
-  userId,
-  userName,
-  userPhoto,
-  details
-) {
+// ─── Activity Log ────────────────────────────────────────────────
+export async function addActivityLog(boardId, type, userId, userName, userPhoto, details) {
   const activityId = 'act_' + generateId();
   try {
     const logRef = doc(db, 'boards', boardId, 'activity', activityId);
@@ -535,15 +521,8 @@ export async function addActivityLog(
   }
 }
 
-export async function addNotification(
-  targetUserId,
-  boardId,
-  boardName,
-  taskId,
-  title,
-  message,
-  type
-) {
+// ─── Notifications ───────────────────────────────────────────────
+export async function addNotification(targetUserId, boardId, boardName, taskId, title, message, type) {
   const notificationId = 'notif_' + generateId();
   try {
     const notifRef = doc(db, 'users', targetUserId, 'notifications', notificationId);
@@ -585,14 +564,7 @@ export async function clearAllNotifications(userId, notificationIds) {
   }
 }
 
-export async function deleteUserProfile(uid) {
-  try {
-    await deleteDoc(doc(db, 'users', uid));
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `users/${uid}`);
-  }
-}
-
+// ─── Focus Sessions ─────────────────────────────────────────────
 export async function saveFocusSession(userId, session) {
   try {
     await setDoc(doc(db, 'users', userId, 'focusSessions', session.id), session);
@@ -610,5 +582,92 @@ export async function getFocusSessions(userId) {
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, `users/${userId}/focusSessions`);
     return [];
+  }
+}
+
+// ─── Server-side Firestore REST Helpers ─────────────────────────
+const PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+const BASE_URL = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
+
+function toValue(val) {
+  if (val === undefined) return null;
+  if (val === null) return { nullValue: null };
+  if (typeof val === 'string') return { stringValue: val };
+  if (typeof val === 'number') {
+    return Number.isInteger(val)
+      ? { integerValue: String(val) }
+      : { doubleValue: val };
+  }
+  if (typeof val === 'boolean') return { booleanValue: val };
+  if (val instanceof Date) return { timestampValue: val.toISOString() };
+  if (Array.isArray(val)) {
+    const mapped = val.map(v => toValue(v)).filter(Boolean);
+    return { arrayValue: mapped.length > 0 ? { values: mapped } : {} };
+  }
+  if (typeof val === 'object') {
+    return { mapValue: { fields: toFields(val) } };
+  }
+  return null;
+}
+
+function toFields(obj) {
+  const fields = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const v = toValue(value);
+    if (v) fields[key] = v;
+  }
+  return fields;
+}
+
+function fromValue(val) {
+  if (!val) return undefined;
+  if (val.stringValue !== undefined) return val.stringValue;
+  if (val.integerValue !== undefined) return parseInt(val.integerValue, 10);
+  if (val.doubleValue !== undefined) return val.doubleValue;
+  if (val.booleanValue !== undefined) return val.booleanValue;
+  if (val.timestampValue) return val.timestampValue;
+  if (val.mapValue?.fields) return fromFields(val.mapValue.fields);
+  if (val.arrayValue?.values) {
+    return val.arrayValue.values.map(v => fromValue(v)).filter(v => v !== undefined);
+  }
+  return undefined;
+}
+
+function fromFields(fields) {
+  if (!fields) return {};
+  const obj = {};
+  for (const [key, value] of Object.entries(fields)) {
+    const v = fromValue(value);
+    if (v !== undefined) obj[key] = v;
+  }
+  return obj;
+}
+
+export async function readDocument(collection, docId, idToken) {
+  const url = `${BASE_URL}/${collection}/${docId}`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${idToken}` },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return fromFields(data.fields);
+}
+
+export async function writeDocument(collection, docId, data, idToken, fieldsToUpdate) {
+  const fieldPaths = fieldsToUpdate || Object.keys(data);
+  const params = fieldPaths.map(f => `updateMask.fieldPaths=${encodeURIComponent(f)}`).join('&');
+  const url = `${BASE_URL}/${collection}/${docId}?${params}`;
+  const body = { fields: toFields(data) };
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Firestore write failed: ${err}`);
   }
 }

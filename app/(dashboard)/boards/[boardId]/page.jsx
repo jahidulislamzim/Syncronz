@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { db } from '../../../../src/lib/firebase.js';
+import { db } from '../../../../src/lib/firebase/client.js';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { KanbanBoard } from '../../../../src/components/KanbanBoard.jsx';
 import { MembersRoster } from '../../../../src/components/MembersRoster.jsx';

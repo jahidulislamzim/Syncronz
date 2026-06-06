@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'next/navigation';
 import { doc } from 'firebase/firestore';
-import { db } from '../lib/firebase.js';
-import { getAllUsers, updateUserProfile, inviteUser, revokeInvite, getInvitedUsers, deleteUserProfile } from '../lib/services.js';
+import { db } from '../lib/firebase/client.js';
+import { getAllUsers, updateUserProfile, inviteUser, revokeInvite, getInvitedUsers, deleteUserProfile } from '../lib/firebase/firestore.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import {
   Mail, ShieldCheck, Plus, Check, X, Search,

@@ -3,9 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../../src/context/AuthContext.jsx';
-import { db } from '../../../../src/lib/firebase.js';
+import { db } from '../../../../src/lib/firebase/client.js';
 import { collection, query, onSnapshot } from 'firebase/firestore';
-import { createBoard, joinBoard, getAllUsers } from '../../../../src/lib/services.js';
+import { createBoard, joinBoard, getAllUsers } from '../../../../src/lib/firebase/firestore.js';
 import { Plus, LogIn, LayoutDashboard, Search, X, UserPlus, Users, Crown, ArrowRight } from 'lucide-react';
 import { BoardManagementSkeleton } from '../../../../src/components/PageLoader.jsx';
 

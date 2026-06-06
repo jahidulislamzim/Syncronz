@@ -2,10 +2,10 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
-import { db } from '../lib/firebase.js';
+import { db } from '../lib/firebase/client.js';
 import { collection, query as firestoreQuery, onSnapshot } from 'firebase/firestore';
 import { MemberRole } from '../types.js';
-import { getAllUsers, joinBoard } from '../lib/services.js';
+import { getAllUsers, joinBoard } from '../lib/firebase/firestore.js';
 import { Users, UserPlus, Shield, Copy, Check, LogOut, Radio, X, Search } from 'lucide-react';
 
 export const MembersRoster = ({ boardId, creatorId }) => {

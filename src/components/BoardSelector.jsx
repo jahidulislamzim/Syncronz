@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
-import { db } from '../lib/firebase.js';
+import { db } from '../lib/firebase/client.js';
 import { collection, query, onSnapshot, getDocs } from 'firebase/firestore';
 import { MemberRole } from '../types.js';
-import { createBoard, joinBoard } from '../lib/services.js';
+import { createBoard, joinBoard } from '../lib/firebase/firestore.js';
 import { X, Plus, LogIn, Sparkles, FolderOpen, Tag, Calendar, User, ArrowRight } from 'lucide-react';
 import { motion } from 'motion/react';
 

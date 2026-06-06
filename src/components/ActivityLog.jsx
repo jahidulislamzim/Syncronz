@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { db } from '../lib/firebase.js';
+import { db } from '../lib/firebase/client.js';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { ActivityType } from '../types.js';
 import { Clock, PlusCircle, CheckSquare, RefreshCw, Send, Users, Compass } from 'lucide-react';

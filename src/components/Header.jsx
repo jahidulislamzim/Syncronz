@@ -3,13 +3,13 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '../context/AuthContext.jsx';
-import { db } from '../lib/firebase.js';
+import { db } from '../lib/firebase/client.js';
 import { collection, query, orderBy, limit, onSnapshot, doc } from 'firebase/firestore';
-import { Bell, Check, Trash2, Shield, Radio, Sparkles, LogOut } from 'lucide-react';
+import { Bell, Check, Trash2, Shield, Radio, Sparkles, LogOut, Menu } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { markNotificationAsRead, clearAllNotifications } from '../lib/services.js';
+import { markNotificationAsRead, clearAllNotifications } from '../lib/firebase/firestore.js';
 
-export const Header = ({ currentBoardName: propBoardName, onOpenBoardSelector: propSelector }) => {
+export const Header = ({ currentBoardName: propBoardName, onOpenBoardSelector: propSelector, onToggleSidebar }) => {
   const { user, profile, signOut } = useAuth();
   const navigate = useRouter();
   const params = useParams();
@@ -188,16 +188,27 @@ export const Header = ({ currentBoardName: propBoardName, onOpenBoardSelector: p
   };
 
   return (
-    <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 sticky top-0 z-40">
+    <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-6 shrink-0 sticky top-0 z-40">
       {/* Brand logo & Active Board display */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center space-x-2.5 md:hidden">
-          <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white font-bold text-sm">TS</div>
-          <span className="text-slate-900 font-bold tracking-tight text-base">Syncro</span>
+      <div className="flex items-center gap-3">
+        {/* Sidebar toggle — mobile */}
+        <button
+          onClick={onToggleSidebar}
+          className="lg:hidden p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition cursor-pointer -ml-1"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+
+        {/* Mobile brand */}
+        <div className="flex items-center gap-2 lg:hidden">
+          <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center">
+            <Sparkles className="w-4 h-4 text-indigo-400" />
+          </div>
+          <span className="text-slate-900 font-bold tracking-tight text-sm">Syncronz</span>
         </div>
-        
-        {/* Active Board Title with synched live element if desktop */}
-        <div className="hidden md:flex items-center gap-3">
+
+        {/* Desktop board title */}
+        <div className="hidden lg:flex items-center gap-3">
           <h1 className="text-lg font-bold text-slate-900">
             {currentBoardName || 'No Board Selected'}
           </h1>
@@ -206,10 +217,10 @@ export const Header = ({ currentBoardName: propBoardName, onOpenBoardSelector: p
           </div>
         </div>
 
-        {/* Board switcher triggers on mobile also */}
+        {/* Board switcher */}
         <button 
           onClick={onOpenBoardSelector}
-          className="flex items-center space-x-1 px-2.5 py-1 bg-slate-50 border border-slate-200 hover:border-slate-350 hover:bg-slate-100 rounded-lg text-xs font-semibold text-slate-700 transition cursor-pointer md:ml-2 shadow-sm"
+          className="hidden sm:flex items-center space-x-1 px-2.5 py-1 bg-slate-50 border border-slate-200 hover:border-slate-350 hover:bg-slate-100 rounded-lg text-xs font-semibold text-slate-700 transition cursor-pointer shadow-sm"
         >
           <Sparkles className="h-3.5 w-3.5 text-blue-600" />
           <span>Switch Workspace</span>

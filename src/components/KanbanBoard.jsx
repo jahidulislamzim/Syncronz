@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
-import { db } from '../lib/firebase.js';
-import { collection, query, onSnapshot } from 'firebase/firestore';
+import { db, auth } from '../lib/firebase/client.js';
+import { collection, query, onSnapshot, doc } from 'firebase/firestore';
 import { TaskStatus, TaskPriority, ActivityType } from '../types.js';
 import { 
   createTask, 
@@ -11,11 +11,11 @@ import {
   updateTaskDetails, 
   deleteTask, 
   addActivityLog 
-} from '../lib/services.js';
+} from '../lib/firebase/firestore.js';
 import { 
   Plus, Edit, Trash2, Calendar, User, AlignLeft, Info, 
   ChevronsUp, ChevronRight, Check, X, Clipboard, MessageSquare, Send,
-  Search, Filter, Paperclip, Link2, CheckSquare, Square, Tag
+  Search, Filter, Paperclip, Link2, CheckSquare, Square, Tag, HardDrive, Upload
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -55,6 +55,10 @@ export const KanbanBoard = ({ boardId }) => {
   const [newTags, setNewTags] = useState([]);
   const [newSubtaskInput, setNewSubtaskInput] = useState('');
   const [inlineSubtasks, setInlineSubtasks] = useState([]);
+
+  // File upload
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const fileInputRef = useRef(null);
 
 
 
@@ -98,6 +102,22 @@ export const KanbanBoard = ({ boardId }) => {
     });
 
     return () => unsubscribe();
+  }, [boardId]);
+
+  // 2b. Listen to board document for Drive config
+  const [boardDrive, setBoardDrive] = useState(null);
+  useEffect(() => {
+    if (!boardId) return;
+    const unsub = onSnapshot(doc(db, 'boards', boardId), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setBoardDrive({
+          enabled: !!data.driveConnectionId,
+          folderUrl: data.driveFolderUrl || null,
+        });
+      }
+    });
+    return () => unsub();
   }, [boardId]);
 
   // Clean inspect focus when board changes
@@ -384,7 +404,56 @@ export const KanbanBoard = ({ boardId }) => {
     await updateTaskDetails(boardId, task.taskId, { attachments: updatedAttachments }, actor);
   };
 
+  // 7. Upload file to Google Drive
+  const handleFileUpload = async (e, task) => {
+    const file = e.target.files?.[0];
+    if (!file || !task) return;
+    e.target.value = '';
+    setUploadingFile(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error('Not authenticated');
 
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('boardId', boardId);
+      formData.append('boardName', document.title || boardId);
+      const uploadRes = await fetch('/api/drive/upload', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+      if (!uploadRes.ok) {
+        const err = await uploadRes.text();
+        throw new Error(`Upload failed: ${err}`);
+      }
+      const attachment = await uploadRes.json();
+
+      const actor = {
+        uid: user.uid,
+        displayName: profile?.displayName || user.displayName || 'Anonymous',
+        photoURL: profile?.photoURL || user.photoURL || '',
+      };
+      const existing = task.attachments ? [...task.attachments] : [];
+      await updateTaskDetails(boardId, task.taskId, { attachments: [...existing, attachment] }, actor);
+
+      await addActivityLog(
+        boardId,
+        ActivityType.TASK_UPDATED,
+        user.uid,
+        actor.displayName,
+        actor.photoURL,
+        `uploaded "${file.name}" to task "${task.title}"`
+      );
+    } catch (error) {
+      console.error('File upload error:', error);
+      alert('Upload failed: ' + error.message);
+    } finally {
+      setUploadingFile(false);
+    }
+  };
 
   const getPriorityStyle = (priority) => {
     switch (priority) {
@@ -463,9 +532,9 @@ export const KanbanBoard = ({ boardId }) => {
           <div className="flex items-baseline justify-between mt-1">
             <span className="text-xl font-extrabold text-red-650">{stats.high}</span>
             <span className="text-red-600 bg-red-50/80 px-2 py-0.5 rounded-lg text-[9px] font-bold font-mono">HIGH</span>
-          </div>
-        </div>
-      </div>
+                          </div>
+                        </div>
+                      </div>
 
       {/* Board Controls Toolbar */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4.5 mb-6 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 shadow-sm">
@@ -1158,38 +1227,41 @@ export const KanbanBoard = ({ boardId }) => {
 
                         {liveInspectingTask.attachments && liveInspectingTask.attachments.length > 0 ? (
                           <div className="space-y-2 mb-4">
-                            {liveInspectingTask.attachments.map(att => (
-                              <div key={att.id} className="flex items-center justify-between p-2.5 border border-slate-200 bg-white rounded-xl shadow-2xs">
-                                <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                                  <div className="p-1.5 bg-blue-50 rounded-lg text-blue-500 shrink-0">
-                                    <Paperclip className="h-3.5 w-3.5" />
+                            {liveInspectingTask.attachments.map((att, idx) => {
+                              const isDrive = att.driveFileId || att.id?.startsWith('drive_');
+                              return (
+                                <div key={att.id || `att-${idx}`} className="flex items-center justify-between p-2.5 border border-slate-200 bg-white rounded-xl shadow-2xs">
+                                  <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                                    <div className={`p-1.5 rounded-lg shrink-0 ${isDrive ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-500'}`}>
+                                      {isDrive ? <HardDrive className="h-3.5 w-3.5" /> : <Paperclip className="h-3.5 w-3.5" />}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs font-bold text-slate-800 truncate leading-tight">{att.name}</p>
+                                      <p className="text-[8.5px] text-slate-400 font-mono mt-0.5">{isDrive ? 'Google Drive' : 'External Web URL'}</p>
+                                    </div>
                                   </div>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-xs font-bold text-slate-800 truncate leading-tight">{att.name}</p>
-                                    <p className="text-[8.5px] text-slate-400 font-mono mt-0.5">External Web URL</p>
+                                  <div className="flex items-center space-x-1 ml-2">
+                                    <a
+                                      href={att.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      referrerPolicy="no-referrer"
+                                      className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 transition inline-block text-center"
+                                    >
+                                      Open
+                                    </a>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteAttachment(liveInspectingTask, att.id)}
+                                      className="p-1 text-slate-400 hover:text-red-500 rounded-md transition cursor-pointer"
+                                      title="Delete attachment"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
                                   </div>
                                 </div>
-                                <div className="flex items-center space-x-1 ml-2">
-                                  <a
-                                    href={att.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    referrerPolicy="no-referrer"
-                                    className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 transition inline-block text-center"
-                                  >
-                                    Open
-                                  </a>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteAttachment(liveInspectingTask, att.id)}
-                                    className="p-1 text-slate-400 hover:text-red-500 rounded-md transition cursor-pointer"
-                                    title="Delete attachment link"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         ) : (
                           <p className="text-[11px] text-slate-400 italic font-medium mb-3">No attachments.</p>
@@ -1229,6 +1301,33 @@ export const KanbanBoard = ({ boardId }) => {
                             </button>
                           </div>
                         </div>
+
+                        {boardDrive?.enabled ? (
+                          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
+                            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-widest block mb-3">Upload File to Google Drive</span>
+                            <input
+                              ref={fileInputRef}
+                              type="file"
+                              onChange={(e) => handleFileUpload(e, liveInspectingTask)}
+                              className="hidden"
+                            />
+                            <button
+                              type="button"
+                              disabled={uploadingFile}
+                              onClick={() => fileInputRef.current?.click()}
+                              className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-lg text-[10px] font-bold transition flex items-center justify-center gap-1 cursor-pointer disabled:cursor-not-allowed"
+                            >
+                              <Upload className="h-3 w-3" />
+                              <span>{uploadingFile ? 'Uploading...' : 'Upload to Drive'}</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
+                            <p className="text-[10.5px] text-slate-400 font-medium text-center">
+                              Google Drive is not enabled for this board. Ask an admin to configure it in Settings.
+                            </p>
+                          </div>
+                        )}
                       </div>
 
                       {/* Controls to transit task status */}

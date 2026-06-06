@@ -2,7 +2,7 @@ import './globals.css';
 import { AuthProvider } from '../src/context/AuthContext.jsx';
 
 export const metadata = {
-  title: 'Syncro — Collaborative Task Management',
+  title: 'Syncronz — Collaborative Task Management',
   description: 'Real-time collaborative task management with Firebase',
 };
 

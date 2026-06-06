@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { doc } from 'firebase/firestore';
-import { db } from '../../../src/lib/firebase.js';
-import { getAllUsers, updateUserProfile, inviteUser, revokeInvite, getInvitedUsers, deleteUserProfile } from '../../../src/lib/services.js';
+import { db, auth } from '../../../src/lib/firebase/client.js';
+import { getAllUsers, updateUserProfile, inviteUser, revokeInvite, getInvitedUsers, deleteUserProfile } from '../../../src/lib/firebase/firestore.js';
 import { useAuth } from '../../../src/context/AuthContext.jsx';
 import {
   Mail, ShieldCheck, Plus, Check, X, Search,
@@ -110,6 +110,26 @@ export default function ManageUsers() {
       setInviteEmail('');
       setInviteName('');
       showToast(`Invitation sent to ${email}`, 'success');
+
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        if (token) {
+          await fetch('/api/send-invite', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              email,
+              displayName: inviteName.trim() || undefined,
+              adminName: profile?.displayName || undefined,
+            }),
+          });
+        }
+      } catch (emailErr) {
+        console.error('Failed to send invite email:', emailErr);
+      }
     } catch {
       showToast('Failed to send invitation', 'error');
     } finally {

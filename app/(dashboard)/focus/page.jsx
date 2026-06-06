@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../../src/context/AuthContext.jsx';
-import { saveFocusSession, getFocusSessions } from '../../../src/lib/services.js';
+import { saveFocusSession, getFocusSessions } from '../../../src/lib/firebase/firestore.js';
 import {
   Play, Pause, RotateCcw, Clock, History, CheckCircle
 } from 'lucide-react';

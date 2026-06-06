@@ -1,101 +1,103 @@
-/**
- * Google Drive REST API File Upload Helpers
- * Bypasses heavy SDK weight using standard Web REST API fetch targets.
- */
+const API_BASE = 'https://www.googleapis.com/drive/v3';
+const UPLOAD_BASE = 'https://www.googleapis.com/upload/drive/v3';
 
-/**
- * Uploads a file to the authenticated user's Google Drive via standard REST API.
- * Uses 'drive.file' scope permissions.
- */
-export async function uploadToGoogleDrive(
-  file,
-  accessToken
-) {
-  const boundary = 'tasksync_multipart_boundary';
-  
-  // We use standard multipart/related upload to create the file with name and MIME type in one request.
-  // This is highly optimal and reliable across different file formats.
-  const metadata = {
-    name: file.name,
-    mimeType: file.type || 'application/octet-stream',
+async function apiFetch(url, options = {}) {
+  const res = await fetch(url, options);
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Drive API error: ${res.status} - ${err}`);
+  }
+  return res;
+}
+
+export async function findFolder(accessToken, parentId, name) {
+  let query = `name='${name.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  if (parentId) {
+    query += ` and '${parentId}' in parents`;
+  }
+  const url = `${API_BASE}/files?q=${encodeURIComponent(query)}&fields=files(id,name)`;
+  const res = await apiFetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await res.json();
+  return data.files?.[0] || null;
+}
+
+export async function createFolder(accessToken, name, parentId) {
+  const body = {
+    name,
+    mimeType: 'application/vnd.google-apps.folder',
   };
+  if (parentId) {
+    body.parents = [parentId];
+  }
+  const res = await apiFetch(`${API_BASE}/files`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
 
-  // Convert file structure into ArrayBuffer
-  const fileArrayBuffer = await file.arrayBuffer();
-  
-  // Format the multipart/related body
-  const headerSegment = 
-    `--${boundary}\r\n` +
-    `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
-    `${JSON.stringify(metadata)}\r\n` +
-    `--${boundary}\r\n` +
-    `Content-Type: ${file.type || 'application/octet-stream'}\r\n\r\n`;
-    
-  const footerSegment = `\r\n--${boundary}--`;
+export async function ensureFolder(accessToken, pathParts) {
+  let parentId = null;
+  for (const name of pathParts) {
+    const existing = await findFolder(accessToken, parentId, name);
+    if (existing) {
+      parentId = existing.id;
+    } else {
+      const created = await createFolder(accessToken, name, parentId);
+      parentId = created.id;
+    }
+  }
+  return parentId;
+}
 
-  // Merge headers, raw binary data and boundaries securely
-  const textEncoder = new TextEncoder();
-  const headerBytes = textEncoder.encode(headerSegment);
-  const footerBytes = textEncoder.encode(footerSegment);
+export async function initResumableUpload(accessToken, fileName, fileSize, mimeType, parentFolderId) {
+  const metadata = { name: fileName };
+  if (parentFolderId) {
+    metadata.parents = [parentFolderId];
+  }
+  const res = await apiFetch(`${UPLOAD_BASE}/files?uploadType=resumable`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      'X-Upload-Content-Type': mimeType,
+      'X-Upload-Content-Length': String(fileSize),
+    },
+    body: JSON.stringify(metadata),
+  });
+  const sessionUrl = res.headers.get('Location');
+  if (!sessionUrl) {
+    throw new Error('No resumable session URL returned');
+  }
+  return sessionUrl;
+}
 
-  const totalBuffer = new Uint8Array(headerBytes.byteLength + fileArrayBuffer.byteLength + footerBytes.byteLength);
-  totalBuffer.set(headerBytes, 0);
-  totalBuffer.set(new Uint8Array(fileArrayBuffer), headerBytes.byteLength);
-  totalBuffer.set(footerBytes, headerBytes.byteLength + fileArrayBuffer.byteLength);
+export async function setPublicPermission(accessToken, fileId) {
+  await apiFetch(`${API_BASE}/files/${fileId}/permissions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      role: 'reader',
+      type: 'anyone',
+    }),
+  });
+}
 
-  // Trigger Google Drive Multipart Upload
-  const uploadRes = await fetch(
-    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+export async function getFileMetadata(accessToken, fileId) {
+  const res = await apiFetch(
+    `${API_BASE}/files/${fileId}?fields=id,name,webViewLink,mimeType,size`,
     {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': `multipart/related; boundary=${boundary}`,
-      },
-      body: totalBuffer,
+      headers: { Authorization: `Bearer ${accessToken}` },
     }
   );
-
-  if (!uploadRes.ok) {
-    const errorText = await uploadRes.text();
-    console.error('Google Drive Upload Failed Context: ', errorText);
-    throw new Error(`Google Drive upload failed with status ${uploadRes.status}: ${errorText}`);
-  }
-
-  const uploadResult = await uploadRes.json();
-  const fileId = uploadResult.id;
-
-  // Query back webViewLink and metadata fields from Google Drive v3 API
-  const metadataRes = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,webViewLink,mimeType,size`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }
-  );
-
-  if (!metadataRes.ok) {
-    // Return standard fallback link if details fetch is blocked
-    return {
-      id: `att_${Math.random().toString(36).substring(2, 9)}`,
-      name: file.name,
-      url: `https://drive.google.com/file/d/${fileId}/view`,
-      driveFileId: fileId,
-      size: file.size,
-      mimeType: file.type || 'application/octet-stream',
-      uploadedAt: new Date().toISOString(),
-    };
-  }
-
-  const payload = await metadataRes.json();
-  return {
-    id: `att_${Math.random().toString(36).substring(2, 9)}`,
-    name: payload.name || file.name,
-    url: payload.webViewLink || `https://drive.google.com/file/d/${fileId}/view`,
-    driveFileId: fileId,
-    size: Number(payload.size) || file.size,
-    mimeType: payload.mimeType || file.type || 'application/octet-stream',
-    uploadedAt: new Date().toISOString(),
-  };
+  return res.json();
 }

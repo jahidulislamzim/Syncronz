@@ -3,8 +3,9 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, deleteDoc } from 'firebase/firestore';
-import { auth, loginWithGoogle, logoutUser, db } from '../lib/firebase.js';
-import { createUserProfile } from '../lib/services.js';
+import { auth, db } from '../lib/firebase/client.js';
+import { loginWithGoogle, logoutUser } from '../lib/firebase/auth.js';
+import { createUserProfile } from '../lib/firebase/firestore.js';
 
 const AuthContext = createContext(undefined);
 
