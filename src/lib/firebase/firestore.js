@@ -336,6 +336,8 @@ export async function createTask(boardId, title, description, priority, dueDate,
       assigneePhoto: primaryAssignee?.photoURL || '',
       assignees: assigneesList,
       creatorId: creator.uid,
+      creatorName: creator.displayName || '',
+      creatorPhoto: creator.photoURL || '',
       createdAt: now,
       updatedAt: now
     });

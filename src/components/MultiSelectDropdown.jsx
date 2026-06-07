@@ -24,10 +24,12 @@ export const MultiSelectDropdown = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Filter members based on search query
+  // Filter members based on search query and remove already selected members
   const filteredMembers = members.filter(m => 
-    m.displayName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    m.email?.toLowerCase().includes(searchQuery.toLowerCase())
+    !selectedIds.includes(m.uid) && (
+      (m.displayName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (m.email || '').toLowerCase().includes(searchQuery.toLowerCase())
+    )
   );
 
   const toggleMember = (uid) => {

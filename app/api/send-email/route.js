@@ -15,7 +15,8 @@ export async function POST(request) {
     const { 
       type, 
       recipientEmail, 
-      recipientName, 
+      recipientName,
+      recipients, 
       actorName, 
       boardId, 
       boardName, 
@@ -28,8 +29,10 @@ export async function POST(request) {
       origin 
     } = body;
 
-    if (!type || !recipientEmail) {
-      return NextResponse.json({ error: 'type and recipientEmail are required' }, { status: 400 });
+    // Check that we have a type, and either recipientEmail or a recipients list
+    const hasRecipient = recipientEmail || (Array.isArray(recipients) && recipients.length > 0);
+    if (!type || !hasRecipient) {
+      return NextResponse.json({ error: 'type and recipientEmail or recipients list are required' }, { status: 400 });
     }
 
     const smtpConfig = await readDocument('settings', 'smtp', idToken);
@@ -40,28 +43,48 @@ export async function POST(request) {
     const emailOrigin = origin || request.headers.get('origin') || new URL(request.url).origin;
     const link = boardId ? `${emailOrigin}/boards/${boardId}` : `${emailOrigin}/`;
 
-    // Process the email sending asynchronously in the background.
-    // By not awaiting the promise, the server responds to the browser instantly,
-    // and continues execution on Node.js process microtask queue.
-    sendActionEmail({
-      smtpConfig,
-      type,
-      to: recipientEmail,
-      recipientName: recipientName || '',
-      actorName: actorName || tokenUser.email || 'Someone',
-      boardName: boardName || 'Project Board',
-      taskTitle: taskTitle || '',
-      details: details || '',
-      link,
-      dueDate: dueDate || '',
-      priority: priority || '',
-      subtasks: subtasks || [],
-    }).catch((err) => {
-      console.error(`[Background Email Dispatch Failed] Type: ${type}, Recipient: ${recipientEmail}`, err);
+    // Normalize target recipients into a unique list
+    const targetRecipients = [];
+    if (recipientEmail) {
+      targetRecipients.push({ email: recipientEmail.trim(), name: recipientName || '' });
+    }
+    if (Array.isArray(recipients)) {
+      recipients.forEach(r => {
+        if (r.email && r.email.trim()) {
+          const emailLower = r.email.trim().toLowerCase();
+          if (!targetRecipients.some(x => x.email.toLowerCase() === emailLower)) {
+            targetRecipients.push({ email: r.email.trim(), name: r.name || '' });
+          }
+        }
+      });
+    }
+
+    // Send emails in parallel and await completion
+    const emailPromises = targetRecipients.map(async (recipient) => {
+      try {
+        await sendActionEmail({
+          smtpConfig,
+          type,
+          to: recipient.email,
+          recipientName: recipient.name,
+          actorName: actorName || tokenUser.email || 'Someone',
+          boardName: boardName || 'Project Board',
+          taskTitle: taskTitle || '',
+          details: details || '',
+          link,
+          dueDate: dueDate || '',
+          priority: priority || '',
+          subtasks: subtasks || [],
+        });
+      } catch (err) {
+        console.error(`[Background Email Dispatch Failed] Type: ${type}, Recipient: ${recipient.email}`, err);
+        throw err;
+      }
     });
 
-    // Instantly respond to client
-    return NextResponse.json({ success: true, message: 'Notification queued in background' });
+    await Promise.all(emailPromises);
+
+    return NextResponse.json({ success: true, message: `Notifications sent to ${targetRecipients.length} recipients` });
   } catch (error) {
     console.error('Send email error:', error);
     return NextResponse.json({ error: error.message || 'Failed to trigger email' }, { status: 500 });

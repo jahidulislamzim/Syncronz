@@ -1,14 +1,16 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext.jsx';
 import { db, auth } from '../lib/firebase/client.js';
 import { collection, query as firestoreQuery, onSnapshot } from 'firebase/firestore';
 import { MemberRole } from '../types.js';
-import { getAllUsers, joinBoard } from '../lib/firebase/firestore.js';
+import { getAllUsers, joinBoard, leaveBoard } from '../lib/firebase/firestore.js';
 import { Users, UserPlus, Shield, Copy, Check, LogOut, Radio, X, Search } from 'lucide-react';
 
 export const MembersRoster = ({ boardId, creatorId, boardName }) => {
+  const router = useRouter();
   const { user } = useAuth();
   const [members, setMembers] = useState([]);
   const [systemUsers, setSystemUsers] = useState([]);
@@ -18,6 +20,9 @@ export const MembersRoster = ({ boardId, creatorId, boardName }) => {
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const dropdownRef = useRef(null);
+
+  const currentUserMember = members.find(m => m.uid === user?.uid);
+  const isOwner = currentUserMember?.role === MemberRole.OWNER || user?.uid === creatorId;
 
   useEffect(() => {
     const membersQuery = firestoreQuery(collection(db, 'boards', boardId, 'members'));
@@ -81,20 +86,20 @@ export const MembersRoster = ({ boardId, creatorId, boardName }) => {
         photoURL: targetUser.photoURL
       }, MemberRole.MEMBER);
 
-      // Send email notification in background
+      // Send email notification
       try {
         const token = await auth.currentUser?.getIdToken();
         if (token && targetUser.email) {
           fetch('/api/send-email', {
             method: 'POST',
+            keepalive: true,
             headers: {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`
             },
             body: JSON.stringify({
               type: 'board_joined',
-              recipientEmail: targetUser.email,
-              recipientName: targetUser.displayName || '',
+              recipients: [{ email: targetUser.email, name: targetUser.displayName || '' }],
               actorName: user?.displayName || user?.email || 'An admin',
               boardId,
               boardName: boardName || 'Project Board'
@@ -112,6 +117,27 @@ export const MembersRoster = ({ boardId, creatorId, boardName }) => {
       setMsg({ type: 'error', text: err.message || 'Failed to add member.' });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleLeaveBoard = async () => {
+    if (!window.confirm('Are you sure you want to leave this board?')) return;
+    try {
+      await leaveBoard(boardId, user.uid, user.displayName || user.email || 'Someone', user.photoURL || '');
+      router.push('/');
+    } catch (err) {
+      console.error('Failed to leave board:', err);
+      alert('Failed to leave board: ' + err.message);
+    }
+  };
+
+  const handleRemoveMember = async (member) => {
+    if (!window.confirm(`Are you sure you want to remove ${member.displayName || member.email || 'this member'} from the board?`)) return;
+    try {
+      await leaveBoard(boardId, member.uid, member.displayName || member.email || 'Someone', member.photoURL || '');
+    } catch (err) {
+      console.error('Failed to remove member:', err);
+      alert('Failed to remove member: ' + err.message);
     }
   };
 
@@ -276,16 +302,45 @@ export const MembersRoster = ({ boardId, creatorId, boardName }) => {
                 </div>
               </div>
 
-              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md font-mono flex items-center space-x-1 ${member.role === MemberRole.OWNER ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}>
-                {member.role === MemberRole.OWNER ? (
+              <div className="flex items-center space-x-2 shrink-0">
+                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md font-mono flex items-center space-x-1 ${member.role === MemberRole.OWNER ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}>
+                  {member.role === MemberRole.OWNER ? (
+                    <>
+                      <Shield className="h-2.5 w-2.5" />
+                      <span>Owner</span>
+                    </>
+                  ) : (
+                    <span>Collab</span>
+                  )}
+                </span>
+                
+                {/* Actions */}
+                {member.role !== MemberRole.OWNER && (
                   <>
-                    <Shield className="h-2.5 w-2.5" />
-                    <span>Owner</span>
+                    {/* If this is the current user themselves, they can Leave */}
+                    {member.uid === user?.uid && (
+                      <button
+                        onClick={handleLeaveBoard}
+                        className="p-1 hover:bg-red-50 text-red-500 hover:text-red-700 rounded-lg transition cursor-pointer"
+                        title="Leave Board"
+                      >
+                        <LogOut className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    
+                    {/* If current user is owner, they can remove other members */}
+                    {isOwner && member.uid !== user?.uid && (
+                      <button
+                        onClick={() => handleRemoveMember(member)}
+                        className="p-1 hover:bg-red-50 text-red-500 hover:text-red-700 rounded-lg transition cursor-pointer"
+                        title="Remove member"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </>
-                ) : (
-                  <span>Collab</span>
                 )}
-              </span>
+              </div>
             </div>
           );
         })}

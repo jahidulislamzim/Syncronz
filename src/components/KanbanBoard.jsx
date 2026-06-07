@@ -16,7 +16,7 @@ import {
   Plus, Edit, Trash2, Calendar, User, AlignLeft, Info, 
   ChevronsUp, ChevronRight, ChevronDown, Check, X, Clipboard, MessageSquare, Send,
   Search, Filter, Paperclip, Link2, CheckSquare, Square, Tag, HardDrive, Upload,
-  BarChart3
+  BarChart3, CheckCircle, AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MultiSelectDropdown } from './MultiSelectDropdown.jsx';
@@ -42,6 +42,13 @@ export const KanbanBoard = ({ boardId }) => {
   const [newAssigneeId, setNewAssigneeId] = useState('');
   const [newAssigneeIds, setNewAssigneeIds] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type) => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   // Editing states within viewer inspector
   const [isEditing, setIsEditing] = useState(false);
@@ -52,6 +59,8 @@ export const KanbanBoard = ({ boardId }) => {
   const [editAssigneeId, setEditAssigneeId] = useState('');
   const [editAssigneeIds, setEditAssigneeIds] = useState([]);
   const [editSubtasks, setEditSubtasks] = useState([]);
+  const [editTags, setEditTags] = useState([]);
+  const [editAttachments, setEditAttachments] = useState([]);
 
   // Task inline thread states
   const [commentText, setCommentText] = useState('');
@@ -148,6 +157,11 @@ export const KanbanBoard = ({ boardId }) => {
     setIsCreateOpen(false);
   }, [boardId]);
 
+  // Reset delete confirm when inspector closes
+  useEffect(() => {
+    if (!inspectingTask) setDeleteConfirm(false);
+  }, [inspectingTask]);
+
   const handleCreateTask = async (e) => {
     e.preventDefault();
     if (!user || !newTitle.trim()) return;
@@ -188,34 +202,34 @@ export const KanbanBoard = ({ boardId }) => {
         }, creatorObj);
       }
 
-      // Trigger background email dispatch to all assignees
+      // Dispatch email notifications to all assignees
       try {
         const token = await auth.currentUser?.getIdToken();
         if (token) {
-          assigneeObjs.forEach((assignee) => {
-            if (assignee.uid !== user.uid && assignee.email) {
-              fetch('/api/send-email', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                  type: 'task_assigned',
-                  recipientEmail: assignee.email,
-                  recipientName: assignee.displayName || '',
-                  actorName: creatorObj.displayName,
-                  boardId,
-                  boardName: document.title || 'Project Board',
-                  taskTitle: newTitle.trim(),
-                  taskId: generatedTaskId,
-                  dueDate: newDueDate,
-                  priority: newPriority,
-                  subtasks: parsedSubtasks
-                })
-              }).catch(err => console.error('Failed to send task assignment email:', err));
-            }
-          });
+          const emailRecipients = assigneeObjs
+            .filter(a => a.uid !== user.uid && a.email)
+            .map(a => ({ email: a.email, name: a.displayName || '' }));
+          if (emailRecipients.length > 0) {
+            fetch('/api/send-email', {
+              method: 'POST',
+              keepalive: true,
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                type: 'task_assigned',
+                recipients: emailRecipients,
+                actorName: creatorObj.displayName,
+                boardId,
+                boardName: document.title || 'Project Board',
+                taskTitle: newTitle.trim(),
+                dueDate: newDueDate,
+                priority: newPriority,
+                subtasks: parsedSubtasks
+              })
+            }).catch(err => console.error('Failed to send task assignment emails:', err));
+          }
         }
       } catch (emailErr) {
         console.error('Failed to dispatch task assignment email notifications:', emailErr);
@@ -257,49 +271,93 @@ export const KanbanBoard = ({ boardId }) => {
         photoURL: profile?.photoURL || user.photoURL || ''
       };
 
+      // Merge attachments based on who is editing to preserve the other stage's attachments
+      const isTaskCreator = user?.uid === inspectingTask.creatorId;
+      const originalAttachments = inspectingTask.attachments || [];
+      let finalAttachments = [];
+      if (isTaskCreator) {
+        // Creator edited the setup attachments. Keep original execution attachments.
+        const originalExecutionAtts = originalAttachments.filter(a => !a.addedAtCreation);
+        // Only keep the setup attachments from editAttachments
+        const editedSetupAtts = editAttachments.filter(a => a.addedAtCreation);
+        finalAttachments = [...editedSetupAtts, ...originalExecutionAtts];
+      } else {
+        // Non-creator edited the execution attachments. Keep original setup attachments.
+        const originalSetupAtts = originalAttachments.filter(a => a.addedAtCreation);
+        // Only keep the execution attachments from editAttachments
+        const editedExecutionAtts = editAttachments.filter(a => !a.addedAtCreation);
+        finalAttachments = [...originalSetupAtts, ...editedExecutionAtts];
+      }
+
       const fields = {
         title: editTitle.trim(),
         description: editDesc.trim(),
         priority: editPriority,
         dueDate: editDueDate,
         assignees: assigneeObjs,
-        subtasks: editSubtasks
+        subtasks: editSubtasks,
+        tags: editTags,
+        attachments: finalAttachments
       };
 
       await updateTaskDetails(boardId, inspectingTask.taskId, fields, actor);
       
-      // Email notifications for assignees (unawaited)
+      // Email notifications for assignees
       try {
         const token = await auth.currentUser?.getIdToken();
         if (token) {
-          const oldUids = new Set((inspectingTask.assignees || (inspectingTask.assigneeId ? [{ uid: inspectingTask.assigneeId }] : [])).map(a => a.uid));
+          const currentTask = liveInspectingTask || inspectingTask;
+          const oldUids = new Set(
+            (currentTask.assignees || (currentTask.assigneeId ? [{ uid: currentTask.assigneeId }] : []))
+              .map(a => a?.uid)
+              .filter(Boolean)
+          );
+          const newRecipients = [];
+          const updateRecipients = [];
           
           assigneeObjs.forEach((assignee) => {
             if (assignee.uid !== user.uid && assignee.email) {
               const isNewAssignment = !oldUids.has(assignee.uid);
-              fetch('/api/send-email', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                  type: isNewAssignment ? 'task_assigned' : 'task_updated',
-                  recipientEmail: assignee.email,
-                  recipientName: assignee.displayName || '',
-                  actorName: actor.displayName,
-                  boardId,
-                  boardName: document.title || 'Project Board',
-                  taskTitle: editTitle.trim(),
-                  taskId: inspectingTask.taskId,
-                  dueDate: editDueDate,
-                  priority: editPriority,
-                  details: isNewAssignment ? 'You have been assigned this task.' : 'Task details were modified.',
-                  subtasks: editSubtasks
-                })
-              }).catch(err => console.error('Failed to send task update email:', err));
+              if (isNewAssignment) {
+                newRecipients.push({ email: assignee.email, name: assignee.displayName || '' });
+              } else {
+                updateRecipients.push({ email: assignee.email, name: assignee.displayName || '' });
+              }
             }
           });
+
+          const sendBatch = (recipients, type, details) => {
+            if (recipients.length === 0) return;
+            fetch('/api/send-email', {
+              method: 'POST',
+              keepalive: true,
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                type,
+                recipients,
+                actorName: actor.displayName,
+                boardId,
+                boardName: document.title || 'Project Board',
+                taskTitle: editTitle.trim(),
+                taskId: currentTask.taskId,
+                dueDate: editDueDate,
+                priority: editPriority,
+                details,
+                subtasks: editSubtasks
+              })
+            }).then(async (res) => {
+              if (!res.ok) {
+                const text = await res.text();
+                console.error(`[API Send Email ${type} Failed]`, text);
+              }
+            }).catch(err => console.error('Failed to send task update emails:', err));
+          };
+
+          sendBatch(newRecipients, 'task_assigned', 'You have been assigned this task.');
+          sendBatch(updateRecipients, 'task_updated', 'Task details were modified.');
         }
       } catch (emailErr) {
         console.error('Failed to dispatch update/assignment email notifications:', emailErr);
@@ -320,22 +378,30 @@ export const KanbanBoard = ({ boardId }) => {
 
   const handleDeleteTask = async (task) => {
     if (!user) return;
-    if (!window.confirm('Are you ABSOLUTELY sure you want to permanently delete this task entry?')) return;
+    if (!deleteConfirm) {
+      setDeleteConfirm(true);
+      return;
+    }
 
-    setIsSubmitting(true);
+    setDeleteConfirm(false);
+    setInspectingTask(null);
+
     try {
-      const actor = {
-        uid: user.uid,
-        displayName: profile?.displayName || user.displayName || 'Anonymous',
-        photoURL: profile?.photoURL || user.photoURL || ''
-      };
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error('Authentication failed');
 
-      await deleteTask(boardId, task.taskId, actor);
-      setInspectingTask(null);
+      const res = await fetch(`/api/boards/tasks?boardId=${boardId}&taskId=${task.taskId}`, {
+        method: 'DELETE',
+        keepalive: true,
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        showToast(errData.error || 'Failed to delete task', 'error');
+      }
     } catch (e) {
-      console.error(e);
-    } finally {
-      setIsSubmitting(false);
+      showToast('Failed to delete task', 'error');
     }
   };
 
@@ -349,7 +415,7 @@ export const KanbanBoard = ({ boardId }) => {
       };
       await updateTaskStatus(boardId, task.taskId, targetStatus, actor);
 
-      // Email notifications for assignees on status change (unawaited)
+      // Email notifications for assignees on status change
       try {
         const assigneesList = task.assignees || (task.assigneeId ? [{ uid: task.assigneeId, displayName: task.assigneeName }] : []);
         const token = await auth.currentUser?.getIdToken();
@@ -362,31 +428,36 @@ export const KanbanBoard = ({ boardId }) => {
           };
           const statusLabel = statusLabels[targetStatus] || targetStatus;
 
+          const emailRecipients = [];
           assigneesList.forEach((assignee) => {
             const memberInfo = members.find(m => m.uid === assignee.uid);
             if (memberInfo && memberInfo.uid !== user.uid && memberInfo.email) {
-              fetch('/api/send-email', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                  type: 'task_updated',
-                  recipientEmail: memberInfo.email,
-                  recipientName: memberInfo.displayName || '',
-                  actorName: actor.displayName,
-                  boardId,
-                  boardName: document.title || 'Project Board',
-                  taskTitle: task.title,
-                  taskId: task.taskId,
-                  priority: task.priority || '',
-                  details: `Status was changed to "${statusLabel}"`,
-                  subtasks: task.subtasks || []
-                })
-              }).catch(err => console.error('Failed to send status update email:', err));
+              emailRecipients.push({ email: memberInfo.email, name: memberInfo.displayName || '' });
             }
           });
+
+          if (emailRecipients.length > 0) {
+            fetch('/api/send-email', {
+              method: 'POST',
+              keepalive: true,
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                type: 'task_updated',
+                recipients: emailRecipients,
+                actorName: actor.displayName,
+                boardId,
+                boardName: document.title || 'Project Board',
+                taskTitle: task.title,
+                taskId: task.taskId,
+                priority: task.priority || '',
+                details: `Status was changed to "${statusLabel}"`,
+                subtasks: task.subtasks || []
+              })
+            }).catch(err => console.error('Failed to send status update emails:', err));
+          }
         }
       } catch (emailErr) {
         console.error('Failed to dispatch status update email notifications:', emailErr);
@@ -462,11 +533,17 @@ export const KanbanBoard = ({ boardId }) => {
     const initialAssigneeIds = task.assignees ? task.assignees.map(a => a.uid) : (task.assigneeId ? [task.assigneeId] : []);
     setEditAssigneeIds(initialAssigneeIds);
     setEditSubtasks(task.subtasks ? [...task.subtasks] : []);
+    setEditTags(task.tags ? [...task.tags] : []);
+    setEditAttachments(task.attachments ? [...task.attachments] : []);
     setIsEditing(false);
   };
 
   // Synchronized live task object from current task list to prevent stale data
   const liveInspectingTask = inspectingTask ? tasks.find(t => t.taskId === inspectingTask.taskId) || inspectingTask : null;
+
+  const taskCreator = liveInspectingTask ? members.find(m => m.uid === liveInspectingTask.creatorId) : null;
+  const creatorName = taskCreator?.displayName || liveInspectingTask?.creatorName || 'Anonymous';
+  const creatorPhoto = taskCreator?.photoURL || liveInspectingTask?.creatorPhoto || '';
 
   // 1. Toggle subtask completion (local)
   const handleToggleSubtask = (subtaskId) => {
@@ -585,7 +662,8 @@ export const KanbanBoard = ({ boardId }) => {
         id: `link_${Math.random().toString(36).substring(2, 9)}`,
         name: safeName,
         url: url.trim().startsWith('http') ? url.trim() : `https://${url.trim()}`,
-        uploadedAt: new Date().toISOString()
+        uploadedAt: new Date().toISOString(),
+        uploadedBy: { uid: user.uid, displayName: profile?.displayName || user.displayName || '' }
       };
       const updatedAttachments = [...attachments, newAttachment];
 
@@ -614,14 +692,20 @@ export const KanbanBoard = ({ boardId }) => {
   // 6. Delete attachment
   const handleDeleteAttachment = async (task, attachmentId) => {
     if (!user) return;
+
+    const attachment = task.attachments?.find(a => a.id === attachmentId);
+    if (!attachment) return;
+
+    if (attachment.addedAtCreation && task.creatorId !== user.uid) {
+      showToast('Only the task creator can delete this attachment', 'error');
+      return;
+    }
+
     const confirmed = window.confirm('Are you sure you want to permanently detach/delete this attachment?');
     if (!confirmed) return;
 
     setIsSubmitting(true);
     try {
-      const attachment = task.attachments?.find(a => a.id === attachmentId);
-      if (!attachment) throw new Error('Attachment not found');
-
       if (attachment.driveFileId) {
         const token = await auth.currentUser?.getIdToken();
         if (token) {
@@ -673,12 +757,76 @@ export const KanbanBoard = ({ boardId }) => {
         throw new Error(`Upload failed: ${err}`);
       }
       const attachment = await uploadRes.json();
-      setNewAttachments(prev => [...prev, attachment]);
+      const enriched = {
+        ...attachment,
+        uploadedBy: { uid: user.uid, displayName: profile?.displayName || user.displayName || '' },
+        addedAtCreation: true
+      };
+      setNewAttachments(prev => [...prev, enriched]);
     } catch (error) {
       console.error('File upload error:', error);
       alert('Upload failed: ' + error.message);
     } finally {
       setUploadingCreationFile(false);
+    }
+  };
+
+  // Edit mode local attachments helpers (non-immediate write to Firestore)
+  const handleEditDeleteAttachment = (attachmentId) => {
+    setEditAttachments(prev => prev.filter(a => a.id !== attachmentId));
+  };
+
+  const handleEditAddLinkAttachment = (name, url) => {
+    const isTaskCreator = user?.uid === liveInspectingTask?.creatorId;
+    const safeName = name.trim() || 'Link URL';
+    const newAttachment = {
+      id: `link_${Math.random().toString(36).substring(2, 9)}`,
+      name: safeName,
+      url: url.trim().startsWith('http') ? url.trim() : `https://${url.trim()}`,
+      uploadedAt: new Date().toISOString(),
+      uploadedBy: { uid: user.uid, displayName: profile?.displayName || user.displayName || '' },
+      addedAtCreation: isTaskCreator
+    };
+    setEditAttachments(prev => [...prev, newAttachment]);
+  };
+
+  const handleEditFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setUploadingFile(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('boardId', boardId);
+      formData.append('boardName', document.title || boardId);
+      const uploadRes = await fetch('/api/drive/upload', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+      if (!uploadRes.ok) {
+        const err = await uploadRes.text();
+        throw new Error(`Upload failed: ${err}`);
+      }
+      const isTaskCreator = user?.uid === liveInspectingTask?.creatorId;
+      const attachment = await uploadRes.json();
+      const enriched = {
+        ...attachment,
+        uploadedBy: { uid: user.uid, displayName: profile?.displayName || user.displayName || '' },
+        addedAtCreation: isTaskCreator
+      };
+      setEditAttachments(prev => [...prev, enriched]);
+    } catch (error) {
+      console.error('File upload error:', error);
+      alert('Upload failed: ' + error.message);
+    } finally {
+      setUploadingFile(false);
     }
   };
 
@@ -708,6 +856,10 @@ export const KanbanBoard = ({ boardId }) => {
         throw new Error(`Upload failed: ${err}`);
       }
       const attachment = await uploadRes.json();
+      const enriched = {
+        ...attachment,
+        uploadedBy: { uid: user.uid, displayName: profile?.displayName || user.displayName || '' }
+      };
 
       const actor = {
         uid: user.uid,
@@ -715,7 +867,7 @@ export const KanbanBoard = ({ boardId }) => {
         photoURL: profile?.photoURL || user.photoURL || '',
       };
       const existing = task.attachments ? [...task.attachments] : [];
-      await updateTaskDetails(boardId, task.taskId, { attachments: [...existing, attachment] }, actor);
+      await updateTaskDetails(boardId, task.taskId, { attachments: [...existing, enriched] }, actor);
 
       await addActivityLog(
         boardId,
@@ -775,6 +927,22 @@ export const KanbanBoard = ({ boardId }) => {
 
   return (
     <div className="flex flex-col flex-1 h-full min-h-[500px]">
+      {toast && (
+        <motion.div
+          initial={{ opacity: 0, y: -20, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -20, scale: 0.95 }}
+          className={`fixed top-6 right-6 z-[100] flex items-center gap-3 px-5 py-3 rounded-2xl shadow-xl border text-sm font-semibold ${
+            toast.type === 'error'
+              ? 'bg-red-50 border-red-200 text-red-800'
+              : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+          }`}
+        >
+          {toast.type === 'error' ? <AlertTriangle className="w-5 h-5 shrink-0" /> : <CheckCircle className="w-5 h-5 shrink-0" />}
+          <span>{toast.message}</span>
+          <button onClick={() => setToast(null)} className="ml-3 opacity-60 hover:opacity-100 cursor-pointer"><X className="w-4 h-4" /></button>
+        </motion.div>
+      )}
       {/* Board KPI Stats Header */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         <div className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col justify-between shadow-sm">
@@ -1388,7 +1556,9 @@ export const KanbanBoard = ({ boardId }) => {
                             name: linkName.trim() || url,
                             url: url,
                             type: 'link',
-                            createdAt: new Date().toISOString()
+                            createdAt: new Date().toISOString(),
+                            uploadedBy: { uid: user.uid, displayName: profile?.displayName || user.displayName || '' },
+                            addedAtCreation: true
                           };
                           setNewAttachments([...newAttachments, newLink]);
                           setLinkUrl('');
@@ -1483,13 +1653,30 @@ export const KanbanBoard = ({ boardId }) => {
                     >
                       <Edit className="h-4 w-4" />
                     </button>
-                    <button
-                      onClick={() => handleDeleteTask(inspectingTask)}
-                      className="p-1.5 text-slate-400 hover:text-red-700 rounded-lg hover:bg-red-50 transition cursor-pointer"
-                      title="Delete entry"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {deleteConfirm ? (
+                      <div className="flex items-center space-x-1">
+                        <button
+                          onClick={() => handleDeleteTask(inspectingTask)}
+                          className="px-2 py-1 text-[11px] font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg transition cursor-pointer"
+                        >
+                          Delete
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirm(false)}
+                          className="px-2 py-1 text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handleDeleteTask(inspectingTask)}
+                        className="p-1.5 text-slate-400 hover:text-red-700 rounded-lg hover:bg-red-50 transition cursor-pointer"
+                        title="Delete task"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                     <button 
                       onClick={() => setInspectingTask(null)}
                       className="p-1.5 hover:bg-slate-200 text-slate-400 hover:text-slate-800 rounded-lg"
@@ -1555,6 +1742,32 @@ export const KanbanBoard = ({ boardId }) => {
                         onChange={(ids) => setEditAssigneeIds(ids)}
                         placeholder="Search and select team members..."
                       />
+                    </div>
+
+                    {/* Edit Tags selection */}
+                    <div className="space-y-1.5 pt-1">
+                      <label className="text-xs font-bold text-slate-700 block">Task Classification Labels</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {["Feature", "Bug", "Refactor", "Docs", "Urgent", "Marketing"].map(tag => {
+                          const selected = editTags.includes(tag);
+                          return (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => {
+                                if (selected) {
+                                  setEditTags(editTags.filter(t => t !== tag));
+                                } else {
+                                  setEditTags([...editTags, tag]);
+                                }
+                              }}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${selected ? 'bg-blue-600 border-blue-600 text-white shadow-sm shadow-blue-600/10' : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-650'}`}
+                            >
+                              {tag}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     {/* --- PROGRESS CHECKLIST EDITOR (Subtasks) --- */}
@@ -1718,6 +1931,131 @@ export const KanbanBoard = ({ boardId }) => {
                       </div>
                     </div>
 
+                    {/* Existing attachments display */}
+                    {editAttachments.length > 0 && (
+                      <div className="pt-3 border-t border-slate-100 mt-2">
+                        <label className="text-[10px] font-bold text-slate-450 uppercase tracking-widest block mb-2.5">
+                          <Paperclip className="h-3.5 w-3.5 inline mr-1 text-blue-500" /> Existing Attachments
+                        </label>
+                        <div className="space-y-3">
+                          {(() => {
+                            const isTaskCreator = user?.uid === liveInspectingTask.creatorId;
+                            const creationAtts = editAttachments.filter(a => a.addedAtCreation);
+                            const updateAtts = editAttachments.filter(a => !a.addedAtCreation);
+
+                            if (isTaskCreator) {
+                              return (
+                                creationAtts.length > 0 ? (
+                                  <div>
+                                    <p className="text-[8.5px] font-bold text-amber-600 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                      From Task Setup
+                                    </p>
+                                    <div className="space-y-1.5">
+                                      {creationAtts.map((att, idx) => (
+                                        <AttachmentRow
+                                          key={att.id || `edit-creation-${idx}`}
+                                          att={att}
+                                          task={liveInspectingTask}
+                                          isProtected={false}
+                                          onDelete={() => handleEditDeleteAttachment(att.id)}
+                                        />
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="text-[10px] text-slate-400 italic">No setup attachments.</p>
+                                )
+                              );
+                            } else {
+                              return (
+                                updateAtts.length > 0 ? (
+                                  <div>
+                                    <p className="text-[8.5px] font-bold text-blue-600 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                                      Added When Doing Task
+                                    </p>
+                                    <div className="space-y-1.5">
+                                      {updateAtts.map((att, idx) => (
+                                        <AttachmentRow
+                                          key={att.id || `edit-update-${idx}`}
+                                          att={att}
+                                          task={liveInspectingTask}
+                                          onDelete={() => handleEditDeleteAttachment(att.id)}
+                                        />
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="text-[10px] text-slate-400 italic">No task-doing attachments.</p>
+                                )
+                              );
+                            }
+                          })()}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Attachments & Links add section */}
+                    <div className="space-y-1.5 pt-3 border-t border-slate-100 mt-2">
+                      <label className="text-xs font-bold text-slate-700 block">Add New Attachments</label>
+                      <div className="flex items-center space-x-2">
+                        {boardDrive?.enabled && (
+                          <>
+                            <input
+                              ref={fileInputRef}
+                              type="file"
+                              onChange={handleEditFileUpload}
+                              className="hidden"
+                              accept=".pdf,image/*,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                            />
+                            <button
+                              type="button"
+                              disabled={uploadingFile}
+                              onClick={() => fileInputRef.current?.click()}
+                              className="flex-1 py-2 px-3 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50 shadow-2xs"
+                            >
+                              <Upload className="h-3.5 w-3.5 text-slate-500" />
+                              <span>{uploadingFile ? 'Uploading File...' : 'Upload PDF / Document'}</span>
+                            </button>
+                          </>
+                        )}
+                        {!boardDrive?.enabled && (
+                          <div className="flex-1 text-[10px] text-slate-400 italic font-medium text-center py-2">
+                            Google Drive is not enabled. Ask an admin to configure it in Settings.
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex space-x-1.5">
+                        <input
+                          type="url"
+                          placeholder="Paste URL Link..."
+                          value={customUrl}
+                          onChange={(e) => setCustomUrl(e.target.value)}
+                          className="flex-1 text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 outline-none transition"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Title"
+                          value={customUrlName}
+                          onChange={(e) => setCustomUrlName(e.target.value)}
+                          className="w-1/4 text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 outline-none transition"
+                        />
+                        <button
+                          type="button"
+                          disabled={isSubmitting || !customUrl.trim()}
+                          onClick={() => {
+                            handleEditAddLinkAttachment(customUrlName, customUrl);
+                            setCustomUrl('');
+                            setCustomUrlName('');
+                          }}
+                          className="px-3 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl text-xs font-bold transition cursor-pointer border border-indigo-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          Add Link
+                        </button>
+                      </div>
+                    </div>
+
                     <div className="flex space-x-2 pt-2">
                       <button
                         type="button"
@@ -1748,11 +2086,22 @@ export const KanbanBoard = ({ boardId }) => {
                             Col: {liveInspectingTask.status.replace('_', ' ').toUpperCase()}
                           </span>
                         </div>
-                        {liveInspectingTask.createdAt && (
-                          <span className="text-slate-450 font-mono font-semibold">
-                            Created: {new Date(liveInspectingTask.createdAt.seconds ? liveInspectingTask.createdAt.seconds * 1000 : liveInspectingTask.createdAt).toLocaleDateString()}
-                          </span>
-                        )}
+                        <div className="flex items-center space-x-1.5 text-slate-500 font-mono text-[9px]">
+                          <span>Created by</span>
+                          <div className="flex items-center space-x-1 bg-slate-100 px-1.5 py-0.5 rounded-md border border-slate-200">
+                            <img
+                              src={creatorPhoto || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(creatorName)}`}
+                              alt=""
+                              className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                            />
+                            <span className="font-bold text-slate-700 truncate max-w-[80px]">{creatorName}</span>
+                          </div>
+                          {liveInspectingTask.createdAt && (
+                            <span className="text-slate-450 font-semibold">
+                              on {new Date(liveInspectingTask.createdAt.seconds ? liveInspectingTask.createdAt.seconds * 1000 : liveInspectingTask.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Main details text */}
@@ -1990,66 +2339,106 @@ export const KanbanBoard = ({ boardId }) => {
                         </label>
 
                         {liveInspectingTask.attachments && liveInspectingTask.attachments.length > 0 ? (
-                          <div className="space-y-2 mb-4">
-                            {liveInspectingTask.attachments.map((att, idx) => {
-                              const isDrive = att.driveFileId || att.id?.startsWith('drive_');
+                          <div className="space-y-4 mb-4">
+                            {(() => {
+                              const creationAtts = liveInspectingTask.attachments.filter(a => a.addedAtCreation);
+                              const updateAtts = liveInspectingTask.attachments.filter(a => !a.addedAtCreation);
                               return (
-                                <div key={att.id || `att-${idx}`} className="flex items-center justify-between p-2.5 border border-slate-200 bg-white rounded-xl shadow-2xs">
-                                  <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                                    <div className={`p-1.5 rounded-lg shrink-0 ${isDrive ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-500'}`}>
-                                      {isDrive ? <HardDrive className="h-3.5 w-3.5" /> : <Paperclip className="h-3.5 w-3.5" />}
+                                <>
+                                  {creationAtts.length > 0 && (
+                                    <div>
+                                      <p className="text-[8.5px] font-bold text-amber-600 uppercase tracking-widest mb-2 flex items-center gap-1">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                        From Task Setup
+                                      </p>
+                                      <div className="space-y-2">
+                                        {creationAtts.map((att, idx) => (
+                                          <AttachmentRow
+                                            key={att.id || `creation-att-${idx}`}
+                                            att={att}
+                                            task={liveInspectingTask}
+                                            isProtected={liveInspectingTask.creatorId !== user.uid}
+                                            onDelete={handleDeleteAttachment}
+                                          />
+                                        ))}
+                                      </div>
                                     </div>
-                                    <div className="min-w-0 flex-1">
-                                      <p className="text-xs font-bold text-slate-800 truncate leading-tight">{att.name}</p>
-                                      <p className="text-[8.5px] text-slate-400 font-mono mt-0.5">{isDrive ? 'Google Drive' : 'External Web URL'}</p>
+                                  )}
+                                  {updateAtts.length > 0 && (
+                                    <div>
+                                      <p className="text-[8.5px] font-bold text-blue-600 uppercase tracking-widest mb-2 flex items-center gap-1">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                                        Added When Doing Task
+                                      </p>
+                                      <div className="space-y-2">
+                                        {updateAtts.map((att, idx) => (
+                                          <AttachmentRow
+                                            key={att.id || `update-att-${idx}`}
+                                            att={att}
+                                            task={liveInspectingTask}
+                                            onDelete={handleDeleteAttachment}
+                                          />
+                                        ))}
+                                      </div>
                                     </div>
-                                  </div>
-                                  <div className="flex items-center space-x-1 ml-2">
-                                    <a
-                                      href={att.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      referrerPolicy="no-referrer"
-                                      className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 transition inline-block text-center"
-                                    >
-                                      Open
-                                    </a>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteAttachment(liveInspectingTask, att.id)}
-                                      className="p-1 text-slate-400 hover:text-red-500 rounded-md transition cursor-pointer"
-                                      title="Delete attachment"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
+                                  )}
+                                </>
                               );
-                            })}
+                            })()}
                           </div>
                         ) : (
                           <p className="text-[11px] text-slate-400 italic font-medium mb-3">No attachments.</p>
                         )}
 
-                        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3">
-                          <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-widest block">Paste External Attachment Link</span>
-                          <div className="space-y-1.5">
-                            <div className="grid grid-cols-2 gap-1.5">
-                              <input
-                                type="text"
-                                placeholder="Description name..."
-                                value={customUrlName}
-                                onChange={(e) => setCustomUrlName(e.target.value)}
-                                className="text-[10px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg focus:border-blue-500 outline-none transition"
-                              />
-                              <input
-                                type="text"
-                                placeholder="https://example.com..."
-                                value={customUrl}
-                                onChange={(e) => setCustomUrl(e.target.value)}
-                                className="text-[10px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg focus:border-blue-500 outline-none transition"
-                              />
-                            </div>
+                        {/* Compact attachments & links row like creation modal */}
+                        <div className="space-y-1.5 pt-3 border-t border-slate-100 mt-3">
+                          <label className="text-[10px] font-bold text-slate-450 uppercase tracking-widest block mb-2.5">
+                            <Paperclip className="h-3.5 w-3.5 inline mr-1 text-blue-500" /> Attachments & Links
+                          </label>
+
+                          <div className="flex items-center space-x-2">
+                            {boardDrive?.enabled && (
+                              <>
+                                <input
+                                  ref={fileInputRef}
+                                  type="file"
+                                  onChange={(e) => handleFileUpload(e, liveInspectingTask)}
+                                  className="hidden"
+                                  accept=".pdf,image/*,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={uploadingFile}
+                                  onClick={() => fileInputRef.current?.click()}
+                                  className="flex-1 py-2 px-3 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50 shadow-2xs"
+                                >
+                                  <Upload className="h-3.5 w-3.5 text-slate-500" />
+                                  <span>{uploadingFile ? 'Uploading File...' : 'Upload PDF / Document'}</span>
+                                </button>
+                              </>
+                            )}
+                            {!boardDrive?.enabled && (
+                              <div className="flex-1 text-[10px] text-slate-400 italic font-medium text-center py-2">
+                                Google Drive is not enabled. Ask an admin to configure it in Settings.
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex space-x-1.5">
+                            <input
+                              type="url"
+                              placeholder="Paste URL Link..."
+                              value={customUrl}
+                              onChange={(e) => setCustomUrl(e.target.value)}
+                              className="flex-1 text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 outline-none transition"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Title"
+                              value={customUrlName}
+                              onChange={(e) => setCustomUrlName(e.target.value)}
+                              className="w-1/4 text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 outline-none transition"
+                            />
                             <button
                               type="button"
                               disabled={isSubmitting || !customUrl.trim()}
@@ -2058,40 +2447,12 @@ export const KanbanBoard = ({ boardId }) => {
                                 setCustomUrl('');
                                 setCustomUrlName('');
                               }}
-                              className="w-full py-1.5 bg-slate-150 hover:bg-slate-200 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-[10px] font-bold transition flex items-center justify-center gap-1 cursor-pointer"
+                              className="px-3 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl text-xs font-bold transition cursor-pointer border border-indigo-150 disabled:opacity-40 disabled:cursor-not-allowed"
                             >
-                              <Link2 className="h-3 w-3" /> 
-                              <span>{isSubmitting ? 'Adding Link...' : 'Add Custom Attachment Link'}</span>
+                              {isSubmitting ? 'Adding...' : 'Add Link'}
                             </button>
                           </div>
                         </div>
-
-                        {boardDrive?.enabled ? (
-                          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
-                            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-widest block mb-3">Upload File to Google Drive</span>
-                            <input
-                              ref={fileInputRef}
-                              type="file"
-                              onChange={(e) => handleFileUpload(e, liveInspectingTask)}
-                              className="hidden"
-                            />
-                            <button
-                              type="button"
-                              disabled={uploadingFile}
-                              onClick={() => fileInputRef.current?.click()}
-                              className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-lg text-[10px] font-bold transition flex items-center justify-center gap-1 cursor-pointer disabled:cursor-not-allowed"
-                            >
-                              <Upload className="h-3 w-3" />
-                              <span>{uploadingFile ? 'Uploading...' : 'Upload to Drive'}</span>
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
-                            <p className="text-[10.5px] text-slate-400 font-medium text-center">
-                              Google Drive is not enabled for this board. Ask an admin to configure it in Settings.
-                            </p>
-                          </div>
-                        )}
                       </div>
 
                       {/* Controls to transit task status */}
@@ -2220,6 +2581,53 @@ export const KanbanBoard = ({ boardId }) => {
           addActivityLog={addActivityLog}
         />
       )}
+    </div>
+  );
+};
+
+const AttachmentRow = ({ att, task, isProtected, onDelete }) => {
+  const isDrive = att.driveFileId || att.id?.startsWith('drive_');
+  const uploaderName = att.uploadedBy?.displayName || '';
+  const cantDelete = isProtected && att.addedAtCreation;
+  return (
+    <div className="flex items-center justify-between p-2.5 border border-slate-200 bg-white rounded-xl shadow-2xs">
+      <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+        <div className={`p-1.5 rounded-lg shrink-0 ${isDrive ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-500'}`}>
+          {isDrive ? <HardDrive className="h-3.5 w-3.5" /> : <Paperclip className="h-3.5 w-3.5" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-bold text-slate-800 truncate leading-tight">{att.name}</p>
+          <p className="text-[8.5px] text-slate-400 font-mono mt-0.5">
+            {isDrive ? 'Google Drive' : 'External Web URL'}
+            {uploaderName && <span className="ml-1.5 text-slate-300">by {uploaderName}</span>}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center space-x-1 ml-2">
+        <a
+          href={att.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          referrerPolicy="no-referrer"
+          className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 transition inline-block text-center"
+        >
+          Open
+        </a>
+        {cantDelete ? (
+          <span className="p-1 text-slate-300 cursor-not-allowed" title="Only the task creator can delete this attachment">
+            <Trash2 className="h-3.5 w-3.5" />
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onDelete(task, att.id)}
+            className="p-1 text-slate-400 hover:text-red-500 rounded-md transition cursor-pointer"
+            title="Delete attachment"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
     </div>
   );
 };

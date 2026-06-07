@@ -356,14 +356,23 @@ function buildTaskUpdatedText({ taskTitle, boardName, actorName, details, priori
   ].filter(Boolean).join('\n');
 }
 
-export async function sendActionEmail({ smtpConfig, type, to, recipientName, actorName, boardName, taskTitle, details, link, dueDate, priority, subtasks }) {
-  const keyHex = process.env.SMTP_ENCRYPTION_KEY;
-  if (!keyHex) {
-    throw new Error('SMTP_ENCRYPTION_KEY not configured');
+async function withRetry(fn, maxRetries = 3, baseDelay = 1000) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(2, attempt - 1);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
-  const pass = decrypt(smtpConfig.passEncrypted, keyHex);
-  const transport = buildTransport({ ...smtpConfig, pass });
+  throw lastError;
+}
 
+async function sendSingleMail({ smtpConfig, type, to, recipientName, actorName, boardName, taskTitle, details, link, dueDate, priority, subtasks }) {
   let html = '';
   let text = '';
   let subject = '';
@@ -384,11 +393,57 @@ export async function sendActionEmail({ smtpConfig, type, to, recipientName, act
     throw new Error(`Unsupported email notification type: ${type}`);
   }
 
-  await transport.sendMail({
+  await withRetry(() => transport.sendMail({
     from: `"${smtpConfig.fromName || 'Syncro'}" <${smtpConfig.fromEmail || smtpConfig.user}>`,
     to,
     subject,
     html,
     text,
-  });
+  }));
+}
+
+let transport = null;
+
+export async function sendActionEmail({ smtpConfig, type, to, recipientName, actorName, boardName, taskTitle, details, link, dueDate, priority, subtasks }) {
+  const keyHex = process.env.SMTP_ENCRYPTION_KEY;
+  if (!keyHex) {
+    throw new Error('SMTP_ENCRYPTION_KEY not configured');
+  }
+  const pass = decrypt(smtpConfig.passEncrypted, keyHex);
+  transport = buildTransport({ ...smtpConfig, pass });
+
+  await sendSingleMail({ smtpConfig, type, to, recipientName, actorName, boardName, taskTitle, details, link, dueDate, priority, subtasks });
+}
+
+export async function sendActionEmails({ smtpConfig, type, recipients, actorName, boardName, taskTitle, details, link, dueDate, priority, subtasks }) {
+  const keyHex = process.env.SMTP_ENCRYPTION_KEY;
+  if (!keyHex) {
+    throw new Error('SMTP_ENCRYPTION_KEY not configured');
+  }
+  const pass = decrypt(smtpConfig.passEncrypted, keyHex);
+  transport = buildTransport({ ...smtpConfig, pass });
+
+  const results = await Promise.allSettled(
+    recipients.map(r =>
+      sendSingleMail({
+        smtpConfig,
+        type,
+        to: r.email,
+        recipientName: r.name || '',
+        actorName,
+        boardName,
+        taskTitle,
+        details,
+        link,
+        dueDate,
+        priority,
+        subtasks,
+      })
+    )
+  );
+  const failures = results.filter(r => r.status === 'rejected');
+  if (failures.length > 0) {
+    console.error(`[sendActionEmails] ${failures.length}/${recipients.length} emails failed:`, failures.map(f => f.reason));
+  }
+  return { sent: recipients.length - failures.length, failed: failures.length };
 }
