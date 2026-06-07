@@ -52,12 +52,33 @@ export async function getAccessToken(saJson) {
   return data.access_token;
 }
 
-export async function refreshOAuthAccessToken(refreshToken) {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+export async function refreshOAuthAccessToken(refreshToken, idToken, customClientId = null, customClientSecret = null) {
+  let clientId = customClientId || process.env.GOOGLE_CLIENT_ID;
+  let clientSecret = customClientSecret || process.env.GOOGLE_CLIENT_SECRET;
 
-  if (!clientId || !clientSecret) {
-    throw new Error('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set for token refresh');
+  const isEnvOrCustomConfigured = clientId && clientSecret && 
+    !clientId.includes('xxx') && !clientSecret.includes('xxx');
+
+  if (!isEnvOrCustomConfigured) {
+    if (!idToken) {
+      throw new Error('idToken required to fetch Google credentials from settings');
+    }
+    try {
+      const { readDocument } = await import('./firebase/firestore.js');
+      const { decrypt } = await import('./crypto.js');
+      const data = await readDocument('settings', 'googleCredentials', idToken);
+      if (data?.encryptedClientId && data?.encryptedClientSecret) {
+        const keyHex = process.env.SMTP_ENCRYPTION_KEY;
+        clientId = decrypt(data.encryptedClientId, keyHex);
+        clientSecret = decrypt(data.encryptedClientSecret, keyHex);
+      }
+    } catch (dbErr) {
+      console.warn('Failed to load Google credentials from settings:', dbErr);
+    }
+  }
+
+  if (!clientId || !clientSecret || clientId.includes('xxx') || clientSecret.includes('xxx')) {
+    throw new Error('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set in .env or configured in Settings');
   }
 
   const res = await fetch('https://oauth2.googleapis.com/token', {

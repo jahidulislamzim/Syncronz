@@ -2,13 +2,13 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
-import { db } from '../lib/firebase/client.js';
+import { db, auth } from '../lib/firebase/client.js';
 import { collection, query as firestoreQuery, onSnapshot } from 'firebase/firestore';
 import { MemberRole } from '../types.js';
 import { getAllUsers, joinBoard } from '../lib/firebase/firestore.js';
 import { Users, UserPlus, Shield, Copy, Check, LogOut, Radio, X, Search } from 'lucide-react';
 
-export const MembersRoster = ({ boardId, creatorId }) => {
+export const MembersRoster = ({ boardId, creatorId, boardName }) => {
   const { user } = useAuth();
   const [members, setMembers] = useState([]);
   const [systemUsers, setSystemUsers] = useState([]);
@@ -80,6 +80,31 @@ export const MembersRoster = ({ boardId, creatorId }) => {
         email: targetUser.email,
         photoURL: targetUser.photoURL
       }, MemberRole.MEMBER);
+
+      // Send email notification in background
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        if (token && targetUser.email) {
+          fetch('/api/send-email', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              type: 'board_joined',
+              recipientEmail: targetUser.email,
+              recipientName: targetUser.displayName || '',
+              actorName: user?.displayName || user?.email || 'An admin',
+              boardId,
+              boardName: boardName || 'Project Board'
+            })
+          }).catch(err => console.error('Failed to dispatch board join email:', err));
+        }
+      } catch (emailErr) {
+        console.error('Failed to get token or trigger join email:', emailErr);
+      }
+
       setMsg({ type: 'success', text: `Added ${targetUser.displayName} to board` });
       setQuery('');
       setTimeout(() => setMsg({ type: '', text: '' }), 4000);

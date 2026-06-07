@@ -1,6 +1,6 @@
 import { readDocument } from './firebase/firestore.js';
 import { decrypt } from './crypto.js';
-import { refreshOAuthAccessToken } from './drive-auth.js';
+import { refreshOAuthAccessToken, getAccessToken } from './drive-auth.js';
 
 const COLLECTION = 'settings';
 const DOC_ID = 'driveConnections';
@@ -44,13 +44,36 @@ export async function getDriveAccessTokenForBoard(boardId, idToken) {
     ? decrypt(connection.encryptedRefreshToken, keyHex)
     : null;
 
+  const customClientId = connection.encryptedClientId
+    ? decrypt(connection.encryptedClientId, keyHex)
+    : null;
+  const customClientSecret = connection.encryptedClientSecret
+    ? decrypt(connection.encryptedClientSecret, keyHex)
+    : null;
+
   if (refreshToken) {
     try {
-      const freshToken = await refreshOAuthAccessToken(refreshToken);
+      const freshToken = await refreshOAuthAccessToken(refreshToken, idToken, customClientId, customClientSecret);
       return freshToken;
-    } catch {
-      return accessToken;
+    } catch (refreshErr) {
+      console.warn('OAuth token refresh failed, attempting Service Account fallback:', refreshErr);
     }
+  }
+
+  // Fallback: Check if global Service Account is configured
+  try {
+    const driveSettings = await readDocument('settings', 'drive', idToken);
+    if (driveSettings?.encryptedKey) {
+      const decryptedSa = decrypt(driveSettings.encryptedKey, keyHex);
+      const saJson = JSON.parse(decryptedSa);
+      const saToken = await getAccessToken(saJson);
+      if (saToken) {
+        console.log('Successfully fell back to Google Drive Service Account authentication.');
+        return saToken;
+      }
+    }
+  } catch (saErr) {
+    console.warn('Service Account fallback failed:', saErr);
   }
 
   return accessToken;
@@ -63,13 +86,36 @@ export async function getConnectionAccessToken(connection, idToken) {
     ? decrypt(connection.encryptedRefreshToken, keyHex)
     : null;
 
+  const customClientId = connection.encryptedClientId
+    ? decrypt(connection.encryptedClientId, keyHex)
+    : null;
+  const customClientSecret = connection.encryptedClientSecret
+    ? decrypt(connection.encryptedClientSecret, keyHex)
+    : null;
+
   if (refreshToken) {
     try {
-      const freshToken = await refreshOAuthAccessToken(refreshToken);
+      const freshToken = await refreshOAuthAccessToken(refreshToken, idToken, customClientId, customClientSecret);
       return freshToken;
-    } catch {
-      return accessToken;
+    } catch (refreshErr) {
+      console.warn('OAuth token refresh failed, attempting Service Account fallback:', refreshErr);
     }
+  }
+
+  // Fallback: Check if global Service Account is configured
+  try {
+    const driveSettings = await readDocument('settings', 'drive', idToken);
+    if (driveSettings?.encryptedKey) {
+      const decryptedSa = decrypt(driveSettings.encryptedKey, keyHex);
+      const saJson = JSON.parse(decryptedSa);
+      const saToken = await getAccessToken(saJson);
+      if (saToken) {
+        console.log('Successfully fell back to Google Drive Service Account authentication.');
+        return saToken;
+      }
+    }
+  } catch (saErr) {
+    console.warn('Service Account fallback failed:', saErr);
   }
 
   return accessToken;

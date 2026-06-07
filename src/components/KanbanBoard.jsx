@@ -14,10 +14,14 @@ import {
 } from '../lib/firebase/firestore.js';
 import { 
   Plus, Edit, Trash2, Calendar, User, AlignLeft, Info, 
-  ChevronsUp, ChevronRight, Check, X, Clipboard, MessageSquare, Send,
-  Search, Filter, Paperclip, Link2, CheckSquare, Square, Tag, HardDrive, Upload
+  ChevronsUp, ChevronRight, ChevronDown, Check, X, Clipboard, MessageSquare, Send,
+  Search, Filter, Paperclip, Link2, CheckSquare, Square, Tag, HardDrive, Upload,
+  BarChart3
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { MultiSelectDropdown } from './MultiSelectDropdown.jsx';
+import { TaskProgressReportModal } from './TaskProgressReportModal.jsx';
+import { TaskCommentsModal } from './TaskCommentsModal.jsx';
 
 export const KanbanBoard = ({ boardId }) => {
   const { user, profile } = useAuth();
@@ -27,6 +31,8 @@ export const KanbanBoard = ({ boardId }) => {
   // Modals / Selection states
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [inspectingTask, setInspectingTask] = useState(null);
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isCommentsOpen, setIsCommentsOpen] = useState(false);
 
   // New task form states
   const [newTitle, setNewTitle] = useState('');
@@ -34,6 +40,7 @@ export const KanbanBoard = ({ boardId }) => {
   const [newPriority, setNewPriority] = useState(TaskPriority.MEDIUM);
   const [newDueDate, setNewDueDate] = useState('');
   const [newAssigneeId, setNewAssigneeId] = useState('');
+  const [newAssigneeIds, setNewAssigneeIds] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Editing states within viewer inspector
@@ -43,6 +50,8 @@ export const KanbanBoard = ({ boardId }) => {
   const [editPriority, setEditPriority] = useState(TaskPriority.MEDIUM);
   const [editDueDate, setEditDueDate] = useState('');
   const [editAssigneeId, setEditAssigneeId] = useState('');
+  const [editAssigneeIds, setEditAssigneeIds] = useState([]);
+  const [editSubtasks, setEditSubtasks] = useState([]);
 
   // Task inline thread states
   const [commentText, setCommentText] = useState('');
@@ -50,15 +59,28 @@ export const KanbanBoard = ({ boardId }) => {
   const [customUrl, setCustomUrl] = useState('');
   const [customUrlName, setCustomUrlName] = useState('');
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  const [subtaskAssigneeType, setSubtaskAssigneeType] = useState('all');
+  const [subtaskAssignedTo, setSubtaskAssignedTo] = useState([]);
+  const [subtaskDropdownOpen, setSubtaskDropdownOpen] = useState(false);
   
   // New task form tagging/checklist extras
   const [newTags, setNewTags] = useState([]);
   const [newSubtaskInput, setNewSubtaskInput] = useState('');
+  const [newSubtaskAssigneeType, setNewSubtaskAssigneeType] = useState('all');
+  const [newSubtaskAssignedTo, setNewSubtaskAssignedTo] = useState([]);
+  const [newSubtaskDropdownOpen, setNewSubtaskDropdownOpen] = useState(false);
   const [inlineSubtasks, setInlineSubtasks] = useState([]);
 
   // File upload
   const [uploadingFile, setUploadingFile] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Task creation stage attachments & links
+  const [newAttachments, setNewAttachments] = useState([]);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkName, setLinkName] = useState('');
+  const [uploadingCreationFile, setUploadingCreationFile] = useState(false);
+  const creationFileInputRef = useRef(null);
 
 
 
@@ -132,7 +154,7 @@ export const KanbanBoard = ({ boardId }) => {
 
     setIsSubmitting(true);
     try {
-      const assigneeObj = members.find(m => m.uid === newAssigneeId) || null;
+      const assigneeObjs = members.filter(m => newAssigneeIds.includes(m.uid));
       const creatorObj = {
         uid: user.uid,
         displayName: profile?.displayName || user.displayName || 'Anonymous',
@@ -145,22 +167,58 @@ export const KanbanBoard = ({ boardId }) => {
         newDesc.trim(),
         newPriority,
         newDueDate,
-        assigneeObj,
+        assigneeObjs,
         creatorObj
       );
 
-      if (generatedTaskId && (newTags.length > 0 || inlineSubtasks.length > 0)) {
-        const parsedSubtasks = inlineSubtasks.map(text => ({
-          id: `sub_${Math.random().toString(36).substring(2, 9)}`,
-          title: text,
-          completed: false
-        }));
+      const parsedSubtasks = inlineSubtasks.map(sub => ({
+        id: `sub_${Math.random().toString(36).substring(2, 9)}`,
+        title: typeof sub === 'string' ? sub : sub.title,
+        assigneeType: sub.assigneeType || 'all',
+        assignedTo: sub.assignedTo || null,
+        completed: false,
+        completedBy: []
+      }));
 
+      if (generatedTaskId) {
         await updateTaskDetails(boardId, generatedTaskId, {
           tags: newTags,
           subtasks: parsedSubtasks,
-          attachments: []
+          attachments: newAttachments
         }, creatorObj);
+      }
+
+      // Trigger background email dispatch to all assignees
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        if (token) {
+          assigneeObjs.forEach((assignee) => {
+            if (assignee.uid !== user.uid && assignee.email) {
+              fetch('/api/send-email', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                  type: 'task_assigned',
+                  recipientEmail: assignee.email,
+                  recipientName: assignee.displayName || '',
+                  actorName: creatorObj.displayName,
+                  boardId,
+                  boardName: document.title || 'Project Board',
+                  taskTitle: newTitle.trim(),
+                  taskId: generatedTaskId,
+                  dueDate: newDueDate,
+                  priority: newPriority,
+                  subtasks: parsedSubtasks
+                })
+              }).catch(err => console.error('Failed to send task assignment email:', err));
+            }
+          });
+        }
+      } catch (emailErr) {
+        console.error('Failed to dispatch task assignment email notifications:', emailErr);
       }
 
       // Clean
@@ -169,9 +227,15 @@ export const KanbanBoard = ({ boardId }) => {
       setNewPriority(TaskPriority.MEDIUM);
       setNewDueDate('');
       setNewAssigneeId('');
+      setNewAssigneeIds([]);
       setNewTags([]);
       setInlineSubtasks([]);
       setNewSubtaskInput('');
+      setNewSubtaskAssigneeType('all');
+      setNewSubtaskAssignedTo('');
+      setNewAttachments([]);
+      setLinkUrl('');
+      setLinkName('');
       setIsCreateOpen(false);
     } catch (err) {
       console.error(err);
@@ -186,7 +250,7 @@ export const KanbanBoard = ({ boardId }) => {
 
     setIsSubmitting(true);
     try {
-      const assigneeObj = members.find(m => m.uid === editAssigneeId) || null;
+      const assigneeObjs = members.filter(m => editAssigneeIds.includes(m.uid));
       const actor = {
         uid: user.uid,
         displayName: profile?.displayName || user.displayName || 'Anonymous',
@@ -198,13 +262,49 @@ export const KanbanBoard = ({ boardId }) => {
         description: editDesc.trim(),
         priority: editPriority,
         dueDate: editDueDate,
-        assigneeId: assigneeObj?.uid || '',
-        assigneeName: assigneeObj?.displayName || '',
-        assigneePhoto: assigneeObj?.photoURL || ''
+        assignees: assigneeObjs,
+        subtasks: editSubtasks
       };
 
       await updateTaskDetails(boardId, inspectingTask.taskId, fields, actor);
       
+      // Email notifications for assignees (unawaited)
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        if (token) {
+          const oldUids = new Set((inspectingTask.assignees || (inspectingTask.assigneeId ? [{ uid: inspectingTask.assigneeId }] : [])).map(a => a.uid));
+          
+          assigneeObjs.forEach((assignee) => {
+            if (assignee.uid !== user.uid && assignee.email) {
+              const isNewAssignment = !oldUids.has(assignee.uid);
+              fetch('/api/send-email', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                  type: isNewAssignment ? 'task_assigned' : 'task_updated',
+                  recipientEmail: assignee.email,
+                  recipientName: assignee.displayName || '',
+                  actorName: actor.displayName,
+                  boardId,
+                  boardName: document.title || 'Project Board',
+                  taskTitle: editTitle.trim(),
+                  taskId: inspectingTask.taskId,
+                  dueDate: editDueDate,
+                  priority: editPriority,
+                  details: isNewAssignment ? 'You have been assigned this task.' : 'Task details were modified.',
+                  subtasks: editSubtasks
+                })
+              }).catch(err => console.error('Failed to send task update email:', err));
+            }
+          });
+        }
+      } catch (emailErr) {
+        console.error('Failed to dispatch update/assignment email notifications:', emailErr);
+      }
+
       // Update local inspection view
       setInspectingTask({
         ...inspectingTask,
@@ -222,6 +322,7 @@ export const KanbanBoard = ({ boardId }) => {
     if (!user) return;
     if (!window.confirm('Are you ABSOLUTELY sure you want to permanently delete this task entry?')) return;
 
+    setIsSubmitting(true);
     try {
       const actor = {
         uid: user.uid,
@@ -233,6 +334,8 @@ export const KanbanBoard = ({ boardId }) => {
       setInspectingTask(null);
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -245,6 +348,49 @@ export const KanbanBoard = ({ boardId }) => {
         photoURL: profile?.photoURL || user.photoURL || ''
       };
       await updateTaskStatus(boardId, task.taskId, targetStatus, actor);
+
+      // Email notifications for assignees on status change (unawaited)
+      try {
+        const assigneesList = task.assignees || (task.assigneeId ? [{ uid: task.assigneeId, displayName: task.assigneeName }] : []);
+        const token = await auth.currentUser?.getIdToken();
+        if (token && assigneesList.length > 0) {
+          const statusLabels = {
+            'todo': 'To Do',
+            'in_progress': 'In Progress',
+            'review': 'In Review',
+            'done': 'Completed'
+          };
+          const statusLabel = statusLabels[targetStatus] || targetStatus;
+
+          assigneesList.forEach((assignee) => {
+            const memberInfo = members.find(m => m.uid === assignee.uid);
+            if (memberInfo && memberInfo.uid !== user.uid && memberInfo.email) {
+              fetch('/api/send-email', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                  type: 'task_updated',
+                  recipientEmail: memberInfo.email,
+                  recipientName: memberInfo.displayName || '',
+                  actorName: actor.displayName,
+                  boardId,
+                  boardName: document.title || 'Project Board',
+                  taskTitle: task.title,
+                  taskId: task.taskId,
+                  priority: task.priority || '',
+                  details: `Status was changed to "${statusLabel}"`,
+                  subtasks: task.subtasks || []
+                })
+              }).catch(err => console.error('Failed to send status update email:', err));
+            }
+          });
+        }
+      } catch (emailErr) {
+        console.error('Failed to dispatch status update email notifications:', emailErr);
+      }
       
       // Sync focus view too if active
       if (inspectingTask?.taskId === task.taskId) {
@@ -260,12 +406,33 @@ export const KanbanBoard = ({ boardId }) => {
 
   const handleAddComment = async (e) => {
     e.preventDefault();
-    if (!user || !inspectingTask || !commentText.trim()) return;
+    if (!user || !liveInspectingTask || !commentText.trim()) return;
 
+    setIsSubmitting(true);
     try {
       const userName = profile?.displayName || user.displayName || 'Anonymous';
       const userPhoto = profile?.photoURL || user.photoURL || '';
+      const actor = {
+        uid: user.uid,
+        displayName: userName,
+        photoURL: userPhoto
+      };
       
+      const newCommentObj = {
+        id: `c_${Math.random().toString(36).substring(2, 9)}`,
+        text: commentText.trim(),
+        userId: user.uid,
+        userName: userName,
+        userPhoto: userPhoto,
+        createdAt: new Date().toISOString()
+      };
+
+      const currentComments = liveInspectingTask.comments || [];
+
+      await updateTaskDetails(boardId, liveInspectingTask.taskId, {
+        comments: [...currentComments, newCommentObj]
+      }, actor);
+
       // Inject task comment thread directly as an Activity Log item on the board!
       // This displays on live sidebar activity stream instantly!
       await addActivityLog(
@@ -274,12 +441,14 @@ export const KanbanBoard = ({ boardId }) => {
         user.uid,
         userName,
         userPhoto,
-        `commented on layout "${inspectingTask.title}": "${commentText.trim()}"`
+        `commented on layout "${liveInspectingTask.title}": "${commentText.trim()}"`
       );
 
       setCommentText('');
     } catch (err) {
       console.error(err);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -290,101 +459,156 @@ export const KanbanBoard = ({ boardId }) => {
     setEditPriority(task.priority);
     setEditDueDate(task.dueDate || '');
     setEditAssigneeId(task.assigneeId || '');
+    const initialAssigneeIds = task.assignees ? task.assignees.map(a => a.uid) : (task.assigneeId ? [task.assigneeId] : []);
+    setEditAssigneeIds(initialAssigneeIds);
+    setEditSubtasks(task.subtasks ? [...task.subtasks] : []);
     setIsEditing(false);
   };
 
   // Synchronized live task object from current task list to prevent stale data
   const liveInspectingTask = inspectingTask ? tasks.find(t => t.taskId === inspectingTask.taskId) || inspectingTask : null;
 
-  // 1. Toggle subtask completion
-  const handleToggleSubtask = async (task, subtaskId) => {
-    if (!user) return;
-    const subtasks = task.subtasks ? [...task.subtasks] : [];
-    const updatedSubtasks = subtasks.map(s => s.id === subtaskId ? { ...s, completed: !s.completed } : s);
-    
-    const actor = {
-      uid: user.uid,
-      displayName: profile?.displayName || user.displayName || 'Anonymous',
-      photoURL: profile?.photoURL || user.photoURL || ''
-    };
-    await updateTaskDetails(boardId, task.taskId, { subtasks: updatedSubtasks }, actor);
+  // 1. Toggle subtask completion (local)
+  const handleToggleSubtask = (subtaskId) => {
+    setEditSubtasks(prev => prev.map(s => {
+      if (s.id !== subtaskId) return s;
+      if (s.assigneeType === 'individual') {
+        const completedBy = s.completedBy || [];
+        const updatedCompletedBy = completedBy.includes(user.uid)
+          ? completedBy.filter(uid => uid !== user.uid)
+          : [...completedBy, user.uid];
+        return { ...s, completedBy: updatedCompletedBy };
+      }
+      return { ...s, completed: !s.completed };
+    }));
   };
 
-  // 2. Add subtask
-  const handleAddSubtask = async (task, titleText) => {
-    if (!user || !titleText.trim()) return;
-    const subtasks = task.subtasks ? [...task.subtasks] : [];
+  // 2. Add subtask (local)
+  const handleAddSubtask = (titleText, assigneeType = 'all', assignedTo = []) => {
+    if (!titleText.trim()) return;
     const newSub = {
       id: `sub_${Math.random().toString(36).substring(2, 9)}`,
       title: titleText.trim(),
-      completed: false
+      assigneeType,
+      assignedTo: assigneeType === 'specific' ? (Array.isArray(assignedTo) ? assignedTo : [assignedTo].filter(Boolean)) : [],
+      completed: false,
+      completedBy: []
     };
-    const updatedSubtasks = [...subtasks, newSub];
-
-    const actor = {
-      uid: user.uid,
-      displayName: profile?.displayName || user.displayName || 'Anonymous',
-      photoURL: profile?.photoURL || user.photoURL || ''
-    };
-    await updateTaskDetails(boardId, task.taskId, { subtasks: updatedSubtasks }, actor);
+    setEditSubtasks(prev => [...prev, newSub]);
   };
 
-  // 3. Delete subtask
-  const handleDeleteSubtask = async (task, subtaskId) => {
-    if (!user) return;
-    const subtasks = task.subtasks ? [...task.subtasks] : [];
-    const updatedSubtasks = subtasks.filter(s => s.id !== subtaskId);
+  // 3. Delete subtask (local)
+  const handleDeleteSubtask = (subtaskId) => {
+    setEditSubtasks(prev => prev.filter(s => s.id !== subtaskId));
+  };
 
-    const actor = {
-      uid: user.uid,
-      displayName: profile?.displayName || user.displayName || 'Anonymous',
-      photoURL: profile?.photoURL || user.photoURL || ''
-    };
-    await updateTaskDetails(boardId, task.taskId, { subtasks: updatedSubtasks }, actor);
+  // 3b. Toggle subtask completion in view mode (restricted by assignee permissions)
+  const handleToggleSubtaskViewMode = async (task, subtaskId) => {
+    if (!user) return;
+    const sub = task.subtasks?.find(s => s.id === subtaskId);
+    if (!sub) return;
+
+    // Enforce checklist rules
+    if (sub.assigneeType === 'specific') {
+      const assignedUids = Array.isArray(sub.assignedTo) ? sub.assignedTo : [sub.assignedTo].filter(Boolean);
+      if (!assignedUids.includes(user.uid)) {
+        alert("Only the designated team members can check/uncheck this checklist item.");
+        return;
+      }
+    }
+    if (sub.assigneeType === 'all' || !sub.assigneeType) {
+      const isAssignee = task.assignees?.some(a => a.uid === user.uid) || task.assigneeId === user.uid;
+      if (!isAssignee) {
+        alert("Only assigned team members can check/uncheck checklist items on this task.");
+        return;
+      }
+    }
+    // Note: 'individual' items can be checked by any board member for themselves.
+
+    setIsSubmitting(true);
+    try {
+      const subtasks = task.subtasks ? [...task.subtasks] : [];
+      const updatedSubtasks = subtasks.map(s => {
+        if (s.id !== subtaskId) return s;
+        if (s.assigneeType === 'individual') {
+          const completedBy = s.completedBy || [];
+          const updatedCompletedBy = completedBy.includes(user.uid)
+            ? completedBy.filter(uid => uid !== user.uid)
+            : [...completedBy, user.uid];
+          return { ...s, completedBy: updatedCompletedBy };
+        }
+        return { ...s, completed: !s.completed };
+      });
+      
+      const actor = {
+        uid: user.uid,
+        displayName: profile?.displayName || user.displayName || 'Anonymous',
+        photoURL: profile?.photoURL || user.photoURL || ''
+      };
+      await updateTaskDetails(boardId, task.taskId, { subtasks: updatedSubtasks }, actor);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // 4. Toggle Tag
   const handleToggleTag = async (task, tag) => {
     if (!user) return;
-    const tags = task.tags ? [...task.tags] : [];
-    const updatedTags = tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag];
+    setIsSubmitting(true);
+    try {
+      const tags = task.tags ? [...task.tags] : [];
+      const updatedTags = tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag];
 
-    const actor = {
-      uid: user.uid,
-      displayName: profile?.displayName || user.displayName || 'Anonymous',
-      photoURL: profile?.photoURL || user.photoURL || ''
-    };
-    await updateTaskDetails(boardId, task.taskId, { tags: updatedTags }, actor);
+      const actor = {
+        uid: user.uid,
+        displayName: profile?.displayName || user.displayName || 'Anonymous',
+        photoURL: profile?.photoURL || user.photoURL || ''
+      };
+      await updateTaskDetails(boardId, task.taskId, { tags: updatedTags }, actor);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // 5. Add Custom Link Attachment
   const handleAddLinkAttachment = async (task, name, url) => {
     if (!user || !url.trim()) return;
-    const attachments = task.attachments ? [...task.attachments] : [];
-    const safeName = name.trim() || 'Link URL';
-    const newAttachment = {
-      id: `link_${Math.random().toString(36).substring(2, 9)}`,
-      name: safeName,
-      url: url.trim().startsWith('http') ? url.trim() : `https://${url.trim()}`,
-      uploadedAt: new Date().toISOString()
-    };
-    const updatedAttachments = [...attachments, newAttachment];
+    setIsSubmitting(true);
+    try {
+      const attachments = task.attachments ? [...task.attachments] : [];
+      const safeName = name.trim() || 'Link URL';
+      const newAttachment = {
+        id: `link_${Math.random().toString(36).substring(2, 9)}`,
+        name: safeName,
+        url: url.trim().startsWith('http') ? url.trim() : `https://${url.trim()}`,
+        uploadedAt: new Date().toISOString()
+      };
+      const updatedAttachments = [...attachments, newAttachment];
 
-    const actor = {
-      uid: user.uid,
-      displayName: profile?.displayName || user.displayName || 'Anonymous',
-      photoURL: profile?.photoURL || user.photoURL || ''
-    };
-    await updateTaskDetails(boardId, task.taskId, { attachments: updatedAttachments }, actor);
-    
-    await addActivityLog(
-      boardId,
-      ActivityType.TASK_UPDATED,
-      user.uid,
-      actor.displayName,
-      actor.photoURL,
-      `attached link "${safeName}" to task "${task.title}"`
-    );
+      const actor = {
+        uid: user.uid,
+        displayName: profile?.displayName || user.displayName || 'Anonymous',
+        photoURL: profile?.photoURL || user.photoURL || ''
+      };
+      await updateTaskDetails(boardId, task.taskId, { attachments: updatedAttachments }, actor);
+      
+      await addActivityLog(
+        boardId,
+        ActivityType.TASK_UPDATED,
+        user.uid,
+        actor.displayName,
+        actor.photoURL,
+        `attached link "${safeName}" to task "${task.title}"`
+      );
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // 6. Delete attachment
@@ -393,15 +617,56 @@ export const KanbanBoard = ({ boardId }) => {
     const confirmed = window.confirm('Are you sure you want to permanently detach/delete this attachment?');
     if (!confirmed) return;
 
-    const attachments = task.attachments ? [...task.attachments] : [];
-    const updatedAttachments = attachments.filter(a => a.id !== attachmentId);
+    setIsSubmitting(true);
+    try {
+      const attachments = task.attachments ? [...task.attachments] : [];
+      const updatedAttachments = attachments.filter(a => a.id !== attachmentId);
 
-    const actor = {
-      uid: user.uid,
-      displayName: profile?.displayName || user.displayName || 'Anonymous',
-      photoURL: profile?.photoURL || user.photoURL || ''
-    };
-    await updateTaskDetails(boardId, task.taskId, { attachments: updatedAttachments }, actor);
+      const actor = {
+        uid: user.uid,
+        displayName: profile?.displayName || user.displayName || 'Anonymous',
+        photoURL: profile?.photoURL || user.photoURL || ''
+      };
+      await updateTaskDetails(boardId, task.taskId, { attachments: updatedAttachments }, actor);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCreationFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setUploadingCreationFile(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('boardId', boardId);
+      formData.append('boardName', document.title || boardId);
+      const uploadRes = await fetch('/api/drive/upload', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+      if (!uploadRes.ok) {
+        const err = await uploadRes.text();
+        throw new Error(`Upload failed: ${err}`);
+      }
+      const attachment = await uploadRes.json();
+      setNewAttachments(prev => [...prev, attachment]);
+    } catch (error) {
+      console.error('File upload error:', error);
+      alert('Upload failed: ' + error.message);
+    } finally {
+      setUploadingCreationFile(false);
+    }
   };
 
   // 7. Upload file to Google Drive
@@ -704,23 +969,43 @@ export const KanbanBoard = ({ boardId }) => {
                           )}
 
                           {/* Interactive Checklist progress loop */}
-                          {task.subtasks && task.subtasks.length > 0 && (
-                            <div className="mt-3 space-y-1">
-                              <div className="flex items-center justify-between text-[9px] text-slate-450 font-mono font-bold">
-                                <span className="flex items-center gap-1">
-                                  <CheckSquare className="h-3 w-3 text-emerald-500" />
-                                  <span>Checklist ({task.subtasks.filter(s => s.completed).length}/{task.subtasks.length})</span>
-                                </span>
-                                <span>{Math.round((task.subtasks.filter(s => s.completed).length / task.subtasks.length) * 100)}%</span>
+                          {(() => {
+                            const visibleSubs = (task.subtasks || []).filter(sub => {
+                              if (sub.assigneeType === 'all' || !sub.assigneeType) return true;
+                              if (sub.assigneeType === 'individual') return true;
+                              if (sub.assigneeType === 'specific') {
+                                const assignedUids = Array.isArray(sub.assignedTo) ? sub.assignedTo : [sub.assignedTo].filter(Boolean);
+                                return assignedUids.includes(user?.uid);
+                              }
+                              return true;
+                            });
+
+                            if (visibleSubs.length === 0) return null;
+
+                            const completed = visibleSubs.filter(s => 
+                              s.assigneeType === 'individual' 
+                                ? s.completedBy?.includes(user?.uid) 
+                                : s.completed
+                            ).length;
+
+                            return (
+                              <div className="mt-3 space-y-1">
+                                <div className="flex items-center justify-between text-[9px] text-slate-450 font-mono font-bold">
+                                  <span className="flex items-center gap-1">
+                                    <CheckSquare className="h-3 w-3 text-emerald-500" />
+                                    <span>Checklist ({completed}/{visibleSubs.length})</span>
+                                  </span>
+                                  <span>{Math.round((completed / visibleSubs.length) * 100)}%</span>
+                                </div>
+                                <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full bg-emerald-500 transition-all duration-300"
+                                    style={{ width: `${(completed / visibleSubs.length) * 100}%` }}
+                                  />
+                                </div>
                               </div>
-                              <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                                <div 
-                                  className="h-full bg-emerald-500 transition-all duration-300"
-                                  style={{ width: `${(task.subtasks.filter(s => s.completed).length / task.subtasks.length) * 100}%` }}
-                                />
-                              </div>
-                            </div>
-                          )}
+                            );
+                          })()}
 
                           {/* Attachments Indicator */}
                           {task.attachments && task.attachments.length > 0 && (
@@ -734,13 +1019,34 @@ export const KanbanBoard = ({ boardId }) => {
                         {/* Task Card Footer */}
                         <div className="flex items-center justify-between pt-3 border-t border-slate-100 flex-wrap gap-2 text-[10px]">
                           {/* Date limit */}
-                          <div className="flex items-center space-x-1.5 text-slate-400">
-                            <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                            <span className="font-mono tracking-wider font-semibold">{task.dueDate || 'No Limit'}</span>
+                          <div className="flex items-center space-x-2.5 text-slate-400">
+                            <div className="flex items-center space-x-1.5">
+                              <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                              <span className="font-mono tracking-wider font-semibold">{task.dueDate || 'No Limit'}</span>
+                            </div>
+                            {(task.comments || []).length > 0 && (
+                              <div className="flex items-center space-x-0.5 text-slate-400 bg-slate-50 border border-slate-200/50 px-1.5 py-0.5 rounded-md font-mono font-bold text-[9px]">
+                                <MessageSquare className="h-3 w-3 text-slate-400" />
+                                <span>{(task.comments || []).length}</span>
+                              </div>
+                            )}
                           </div>
 
                           {/* Assignee display */}
-                          {task.assigneeName ? (
+                          {task.assignees && task.assignees.length > 0 ? (
+                            <div className="flex items-center -space-x-1.5 overflow-hidden">
+                              {task.assignees.map((assignee) => (
+                                <img
+                                  key={assignee.uid}
+                                  className="inline-block h-5 w-5 rounded-full ring-2 ring-white object-cover border border-slate-100"
+                                  src={assignee.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(assignee.displayName)}`}
+                                  alt={assignee.displayName}
+                                  title={assignee.displayName}
+                                  referrerPolicy="no-referrer"
+                                />
+                              ))}
+                            </div>
+                          ) : task.assigneeName ? (
                             <div className="flex items-center space-x-1.5 bg-slate-50 border border-slate-200/60 rounded-full py-0.5 pl-0.5 pr-2.5">
                               <img
                                 src={task.assigneePhoto || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(task.assigneeName)}`}
@@ -846,17 +1152,13 @@ export const KanbanBoard = ({ boardId }) => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700">Assign To Team Member</label>
-                  <select
-                    value={newAssigneeId}
-                    onChange={(e) => setNewAssigneeId(e.target.value)}
-                    className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 outline-none cursor-pointer"
-                  >
-                    <option value="">Unassigned</option>
-                    {members.map(m => (
-                      <option key={m.uid} value={m.uid}>{m.displayName} ({m.email})</option>
-                    ))}
-                  </select>
+                  <label className="text-xs font-bold text-slate-700">Assign To Team Members</label>
+                  <MultiSelectDropdown
+                    members={members}
+                    selectedIds={newAssigneeIds}
+                    onChange={(ids) => setNewAssigneeIds(ids)}
+                    placeholder="Search and select team members..."
+                  />
                 </div>
 
                 {/* Initial Tags selection */}
@@ -888,6 +1190,39 @@ export const KanbanBoard = ({ boardId }) => {
                 {/* Initial Checklist construction */}
                 <div className="space-y-1.5 pt-1">
                   <label className="text-xs font-bold text-slate-700 block">Pre-Plan Checklist Items</label>
+                  
+                  {/* New subtask assignee selection row */}
+                  <div className="space-y-2 py-1.5">
+                    <div className="flex items-center space-x-2 text-xs">
+                      <span className="text-slate-500 font-bold">Assign to:</span>
+                      <select
+                        value={newSubtaskAssigneeType}
+                        onChange={(e) => {
+                          setNewSubtaskAssigneeType(e.target.value);
+                          if (e.target.value !== 'specific') {
+                            setNewSubtaskAssignedTo([]);
+                          }
+                        }}
+                        className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 outline-none text-[11px] text-slate-700 font-semibold cursor-pointer"
+                      >
+                        <option value="all">Anyone</option>
+                        <option value="specific">Specific Person</option>
+                        <option value="individual">Each person individually</option>
+                      </select>
+                    </div>
+
+                    {newSubtaskAssigneeType === 'specific' && (
+                      <div className="w-full">
+                        <MultiSelectDropdown
+                          members={members}
+                          selectedIds={newSubtaskAssignedTo}
+                          onChange={(uids) => setNewSubtaskAssignedTo(uids)}
+                          placeholder="Assign members..."
+                        />
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex space-x-1.5">
                     <input
                       type="text"
@@ -898,8 +1233,18 @@ export const KanbanBoard = ({ boardId }) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
                           if (newSubtaskInput.trim()) {
-                            setInlineSubtasks([...inlineSubtasks, newSubtaskInput.trim()]);
+                            if (newSubtaskAssigneeType === 'specific' && (!newSubtaskAssignedTo || newSubtaskAssignedTo.length === 0)) {
+                              alert('Please select at least one team member for this subtask.');
+                              return;
+                            }
+                            setInlineSubtasks([...inlineSubtasks, {
+                              title: newSubtaskInput.trim(),
+                              assigneeType: newSubtaskAssigneeType,
+                              assignedTo: newSubtaskAssignedTo
+                            }]);
                             setNewSubtaskInput('');
+                            setNewSubtaskAssigneeType('all');
+                            setNewSubtaskAssignedTo([]);
                           }
                         }
                       }}
@@ -909,8 +1254,18 @@ export const KanbanBoard = ({ boardId }) => {
                       type="button"
                       onClick={() => {
                         if (newSubtaskInput.trim()) {
-                          setInlineSubtasks([...inlineSubtasks, newSubtaskInput.trim()]);
+                          if (newSubtaskAssigneeType === 'specific' && (!newSubtaskAssignedTo || newSubtaskAssignedTo.length === 0)) {
+                            alert('Please select at least one team member for this subtask.');
+                            return;
+                          }
+                          setInlineSubtasks([...inlineSubtasks, {
+                            title: newSubtaskInput.trim(),
+                            assigneeType: newSubtaskAssigneeType,
+                            assignedTo: newSubtaskAssignedTo
+                          }]);
                           setNewSubtaskInput('');
+                          setNewSubtaskAssigneeType('all');
+                          setNewSubtaskAssignedTo([]);
                         }
                       }}
                       className="px-3 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-bold transition cursor-pointer"
@@ -918,15 +1273,138 @@ export const KanbanBoard = ({ boardId }) => {
                       Add
                     </button>
                   </div>
+
                   {inlineSubtasks.length > 0 && (
                     <div className="mt-2 bg-slate-50 rounded-xl p-2.5 border border-slate-100 space-y-1.5 max-h-[120px] overflow-y-auto subtle-scroll">
-                      {inlineSubtasks.map((text, idx) => (
-                        <div key={idx} className="flex items-center justify-between text-[11px] text-slate-650 bg-white px-2.5 py-1 rounded-lg border border-slate-150 shadow-2xs">
-                          <span className="truncate pr-2 font-medium">{text}</span>
+                      {inlineSubtasks.map((sub, idx) => {
+                        let assignmentBadge = null;
+                        if (sub.assigneeType === 'specific') {
+                          const assignedUids = Array.isArray(sub.assignedTo) ? sub.assignedTo : [sub.assignedTo].filter(Boolean);
+                          const names = assignedUids.map(uid => {
+                            const m = members.find(member => member.uid === uid);
+                            return m ? (m.displayName || m.email.split('@')[0]) : '';
+                          }).filter(Boolean);
+                          
+                          assignmentBadge = (
+                            <span 
+                              className="text-[9px] px-1.5 py-0.5 rounded-md bg-indigo-50 border border-indigo-100 text-indigo-600 font-bold ml-2 shrink-0 truncate max-w-[120px]"
+                              title={names.join(', ')}
+                            >
+                              @{names.length > 1 ? `${names.length} members` : (names[0] || 'specific user')}
+                            </span>
+                          );
+                        } else if (sub.assigneeType === 'individual') {
+                          assignmentBadge = (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-100 text-amber-600 font-bold ml-2 shrink-0">
+                              indiv
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <div key={idx} className="flex items-center justify-between text-[11px] text-slate-650 bg-white px-2.5 py-1 rounded-lg border border-slate-150 shadow-2xs">
+                            <div className="flex items-center min-w-0 pr-2">
+                              <span className="truncate font-medium">{sub.title}</span>
+                              {assignmentBadge}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setInlineSubtasks(inlineSubtasks.filter((_, i) => i !== idx))}
+                              className="text-red-500 hover:text-red-700 text-xs font-bold px-1 transition-colors cursor-pointer shrink-0"
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Creation Stage Attachments & Links */}
+                <div className="space-y-1.5 pt-3 border-t border-slate-100 mt-2">
+                  <label className="text-xs font-bold text-slate-700 block">Task Assets & Links</label>
+                  
+                  {/* File Upload Row */}
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="file"
+                      ref={creationFileInputRef}
+                      onChange={handleCreationFileUpload}
+                      className="hidden"
+                      accept=".pdf,image/*,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    />
+                    <button
+                      type="button"
+                      disabled={uploadingCreationFile}
+                      onClick={() => creationFileInputRef.current?.click()}
+                      className="flex-1 py-2 px-3 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50 shadow-2xs"
+                    >
+                      <Upload className="h-3.5 w-3.5 text-slate-500" />
+                      <span>{uploadingCreationFile ? 'Uploading File...' : 'Upload PDF / Document'}</span>
+                    </button>
+                  </div>
+
+                  {/* Add Web Link Row */}
+                  <div className="flex flex-col space-y-1.5 pt-1">
+                    <div className="flex space-x-1.5">
+                      <input
+                        type="url"
+                        placeholder="Paste URL Link..."
+                        value={linkUrl}
+                        onChange={(e) => setLinkUrl(e.target.value)}
+                        className="flex-1 text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 outline-none transition"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Title"
+                        value={linkName}
+                        onChange={(e) => setLinkName(e.target.value)}
+                        className="w-1/4 text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 outline-none transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!linkUrl.trim()) return;
+                          let url = linkUrl.trim();
+                          if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                            url = 'https://' + url;
+                          }
+                          const newLink = {
+                            id: `link_${Math.random().toString(36).substring(2, 9)}`,
+                            name: linkName.trim() || url,
+                            url: url,
+                            type: 'link',
+                            createdAt: new Date().toISOString()
+                          };
+                          setNewAttachments([...newAttachments, newLink]);
+                          setLinkUrl('');
+                          setLinkName('');
+                        }}
+                        className="px-3 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl text-xs font-bold transition cursor-pointer border border-indigo-150"
+                      >
+                        Add Link
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* List of currently added attachments in creation modal */}
+                  {newAttachments.length > 0 && (
+                    <div className="mt-2.5 bg-slate-50 border border-slate-100 rounded-xl p-2.5 space-y-1.5 max-h-[120px] overflow-y-auto subtle-scroll">
+                      {newAttachments.map((att) => (
+                        <div key={att.id} className="flex items-center justify-between text-[11px] text-slate-650 bg-white px-2.5 py-1.5 rounded-lg border border-slate-150 shadow-2xs">
+                          <div className="flex items-center space-x-1.5 min-w-0 pr-2">
+                            {att.type === 'link' ? (
+                              <Link2 className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                            ) : (
+                              <Paperclip className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                            )}
+                            <span className="truncate font-semibold">{att.name}</span>
+                          </div>
                           <button
                             type="button"
-                            onClick={() => setInlineSubtasks(inlineSubtasks.filter((_, i) => i !== idx))}
-                            className="text-red-500 hover:text-red-700 text-xs font-bold px-1 transition-colors cursor-pointer"
+                            onClick={() => setNewAttachments(newAttachments.filter(a => a.id !== att.id))}
+                            className="text-red-500 hover:text-red-700 text-xs font-bold px-1 transition-colors cursor-pointer shrink-0"
                           >
                             &times;
                           </button>
@@ -984,6 +1462,7 @@ export const KanbanBoard = ({ boardId }) => {
                           setEditPriority(inspectingTask.priority);
                           setEditDueDate(inspectingTask.dueDate || '');
                           setEditAssigneeId(inspectingTask.assigneeId || '');
+                          setEditSubtasks(inspectingTask.subtasks ? [...inspectingTask.subtasks] : []);
                         }
                       }}
                       className="p-1.5 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-200 transition cursor-pointer"
@@ -1056,17 +1535,174 @@ export const KanbanBoard = ({ boardId }) => {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Reassign Board Member</label>
-                      <select
-                        value={editAssigneeId}
-                        onChange={(e) => setEditAssigneeId(e.target.value)}
-                        className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl"
-                      >
-                        <option value="">Unassigned</option>
-                        {members.map(m => (
-                          <option key={m.uid} value={m.uid}>{m.displayName}</option>
-                        ))}
-                      </select>
+                      <label className="text-xs font-bold text-slate-700">Assign To Team Members</label>
+                      <MultiSelectDropdown
+                        members={members}
+                        selectedIds={editAssigneeIds}
+                        onChange={(ids) => setEditAssigneeIds(ids)}
+                        placeholder="Search and select team members..."
+                      />
+                    </div>
+
+                    {/* --- PROGRESS CHECKLIST EDITOR (Subtasks) --- */}
+                    <div className="pt-4.5 border-t border-slate-100 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-700">
+                          <CheckSquare className="h-4 w-4 inline mr-1 text-emerald-500" /> Interactive Checklist
+                        </label>
+                        {editSubtasks && editSubtasks.length > 0 && (
+                          <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md font-mono">
+                            {editSubtasks.filter(s => s.completed).length} of {editSubtasks.length} done
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Progress dynamic gauge */}
+                      {editSubtasks && editSubtasks.length > 0 && (
+                        <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200/40">
+                          <div 
+                            className="h-full bg-emerald-500 transition-all duration-350"
+                            style={{ width: `${(editSubtasks.filter(s => s.completed).length / editSubtasks.length) * 100}%` }}
+                          />
+                        </div>
+                      )}
+
+                      {/* List subtasks items */}
+                      {editSubtasks && editSubtasks.length > 0 && (
+                        <div className="space-y-1.5 max-h-[160px] overflow-y-auto subtle-scroll py-1">
+                          {editSubtasks.map(sub => {
+                            let assignmentBadge = null;
+                            if (sub.assigneeType === 'specific') {
+                              const assignedUids = Array.isArray(sub.assignedTo) ? sub.assignedTo : [sub.assignedTo].filter(Boolean);
+                              const names = assignedUids.map(uid => {
+                                const m = members.find(member => member.uid === uid);
+                                return m ? (m.displayName || m.email.split('@')[0]) : '';
+                              }).filter(Boolean);
+                              
+                              assignmentBadge = (
+                                <span 
+                                  className="text-[9px] px-1.5 py-0.5 rounded-md bg-indigo-50 border border-indigo-100 text-indigo-600 font-bold ml-2 shrink-0 truncate max-w-[120px]"
+                                  title={names.join(', ')}
+                                >
+                                  @{names.length > 1 ? `${names.length} members` : (names[0] || 'specific user')}
+                                </span>
+                              );
+                            } else if (sub.assigneeType === 'individual') {
+                              assignmentBadge = (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-100 text-amber-600 font-bold ml-2 shrink-0">
+                                  indiv
+                                </span>
+                              );
+                            }
+                            
+                            const isCompleted = sub.assigneeType === 'individual' 
+                              ? sub.completedBy?.includes(user?.uid) 
+                              : sub.completed;
+
+                            return (
+                              <div key={sub.id} className="flex items-center justify-between group/sub px-3 py-2 border border-slate-200 rounded-xl bg-slate-50/50 hover:bg-slate-55 transition-colors">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleSubtask(sub.id)}
+                                  className="flex items-center space-x-2.5 text-left flex-1 min-w-0 cursor-pointer"
+                                >
+                                  {isCompleted ? (
+                                    <CheckSquare className="h-4 w-4 text-emerald-500 shrink-0" />
+                                  ) : (
+                                    <Square className="h-4 w-4 text-slate-350 hover:text-slate-555 shrink-0" />
+                                  )}
+                                  <span className={`text-xs font-semibold truncate ${isCompleted ? 'line-through text-slate-400' : 'text-slate-700'}`}>{sub.title}</span>
+                                  {assignmentBadge}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteSubtask(sub.id)}
+                                  className="opacity-0 group-hover/sub:opacity-100 p-1 text-slate-400 hover:text-red-500 rounded-md transition cursor-pointer shrink-0 ml-1"
+                                  title="Remove subtask"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Add subtask item options row */}
+                      <div className="space-y-2 py-2 border-t border-slate-100/50">
+                        <div className="flex items-center space-x-2 text-xs">
+                          <span className="text-slate-500 font-bold">Assign to:</span>
+                          <select
+                            value={subtaskAssigneeType}
+                            onChange={(e) => {
+                              setSubtaskAssigneeType(e.target.value);
+                              if (e.target.value !== 'specific') {
+                                setSubtaskAssignedTo([]);
+                              }
+                            }}
+                            className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 outline-none text-[11px] text-slate-700 font-semibold cursor-pointer"
+                          >
+                            <option value="all">Anyone</option>
+                            <option value="specific">Specific Person</option>
+                            <option value="individual">Each person individually</option>
+                          </select>
+                        </div>
+
+                        {subtaskAssigneeType === 'specific' && (
+                          <div className="w-full">
+                            <MultiSelectDropdown
+                              members={members}
+                              selectedIds={subtaskAssignedTo}
+                              onChange={(uids) => setSubtaskAssignedTo(uids)}
+                              placeholder="Assign members..."
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Add subtask item inline input */}
+                      <div className="flex space-x-1.5">
+                        <input
+                          type="text"
+                          placeholder="Add item to checklist..."
+                          value={newSubtaskTitle}
+                          onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (newSubtaskTitle.trim()) {
+                                if (subtaskAssigneeType === 'specific' && (!subtaskAssignedTo || subtaskAssignedTo.length === 0)) {
+                                  alert('Please select at least one team member for this subtask.');
+                                  return;
+                                }
+                                handleAddSubtask(newSubtaskTitle.trim(), subtaskAssigneeType, subtaskAssignedTo);
+                                setNewSubtaskTitle('');
+                                setSubtaskAssigneeType('all');
+                                setSubtaskAssignedTo([]);
+                              }
+                            }
+                          }}
+                          className="flex-1 text-xs px-3 py-2 bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 rounded-xl outline-none transition"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (newSubtaskTitle.trim()) {
+                              if (subtaskAssigneeType === 'specific' && (!subtaskAssignedTo || subtaskAssignedTo.length === 0)) {
+                                  alert('Please select at least one team member for this subtask.');
+                                  return;
+                              }
+                              handleAddSubtask(newSubtaskTitle.trim(), subtaskAssigneeType, subtaskAssignedTo);
+                              setNewSubtaskTitle('');
+                              setSubtaskAssigneeType('all');
+                              setSubtaskAssignedTo([]);
+                            }
+                          }}
+                          className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-sm"
+                        >
+                          Add
+                        </button>
+                      </div>
                     </div>
 
                     <div className="flex space-x-2 pt-2">
@@ -1079,9 +1715,10 @@ export const KanbanBoard = ({ boardId }) => {
                       </button>
                       <button
                         type="submit"
-                        className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition cursor-pointer"
+                        disabled={isSubmitting}
+                        className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition cursor-pointer disabled:opacity-50"
                       >
-                        Save layout
+                        {isSubmitting ? 'Saving...' : 'Save layout'}
                       </button>
                     </div>
                   </form>
@@ -1139,85 +1776,199 @@ export const KanbanBoard = ({ boardId }) => {
                       </div>
 
                       {/* --- PROGRESS CHECKLIST (Subtasks) --- */}
-                      <div className="pt-4.5 mt-5 border-t border-slate-100">
-                        <div className="flex items-center justify-between mb-2">
-                          <label className="text-[10px] font-bold text-slate-450 uppercase tracking-widest block">
-                            <CheckSquare className="h-3.5 w-3.5 inline mr-1 text-emerald-500" /> Interactive Checklist
-                          </label>
-                          {liveInspectingTask.subtasks && liveInspectingTask.subtasks.length > 0 && (
-                            <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md font-mono">
-                              {liveInspectingTask.subtasks.filter(s => s.completed).length} of {liveInspectingTask.subtasks.length} done
-                            </span>
-                          )}
-                        </div>
+                      {(() => {
+                        const visibleSubtasks = (liveInspectingTask.subtasks || []).filter(sub => {
+                          if (sub.assigneeType === 'all' || !sub.assigneeType) return true;
+                          if (sub.assigneeType === 'individual') return true;
+                          if (sub.assigneeType === 'specific') {
+                            const assignedUids = Array.isArray(sub.assignedTo) ? sub.assignedTo : [sub.assignedTo].filter(Boolean);
+                            return assignedUids.includes(user?.uid);
+                          }
+                          return true;
+                        });
 
-                        {/* Progress dynamic gauge */}
-                        {liveInspectingTask.subtasks && liveInspectingTask.subtasks.length > 0 && (
-                          <div className="mb-3.5 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200/40">
-                            <div 
-                              className="h-full bg-emerald-500 transition-all duration-350"
-                              style={{ width: `${(liveInspectingTask.subtasks.filter(s => s.completed).length / liveInspectingTask.subtasks.length) * 100}%` }}
-                            />
-                          </div>
-                        )}
+                        if (visibleSubtasks.length === 0) return null;
 
-                        {/* List subtasks items */}
-                        {liveInspectingTask.subtasks && liveInspectingTask.subtasks.length > 0 && (
-                          <div className="space-y-1.5 max-h-[160px] overflow-y-auto subtle-scroll mb-3">
-                            {liveInspectingTask.subtasks.map(sub => (
-                              <div key={sub.id} className="flex items-center justify-between group/sub px-3 py-2 border border-slate-250/70 rounded-xl bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleSubtask(liveInspectingTask, sub.id)}
-                                  className="flex items-center space-x-2.5 text-left flex-1 cursor-pointer"
-                                >
-                                  {sub.completed ? (
-                                    <CheckSquare className="h-4 w-4 text-emerald-500 shrink-0" />
-                                  ) : (
-                                    <Square className="h-4 w-4 text-slate-350 hover:text-slate-550 shrink-0" />
-                                  )}
-                                  <span className={`text-xs font-semibold ${sub.completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>{sub.title}</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteSubtask(liveInspectingTask, sub.id)}
-                                  className="opacity-0 group-hover/sub:opacity-100 p-1 text-slate-400 hover:text-red-500 rounded-md transition cursor-pointer"
-                                  title="Remove subtask"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
+                        const completedCount = visibleSubtasks.filter(s => 
+                          s.assigneeType === 'individual' 
+                            ? s.completedBy?.includes(user?.uid) 
+                            : s.completed
+                        ).length;
+
+                        return (
+                          <div className="pt-4.5 mt-5 border-t border-slate-100">
+                            <div className="flex items-center justify-between mb-2">
+                              <label className="text-[10px] font-bold text-slate-450 uppercase tracking-widest block">
+                                <CheckSquare className="h-3.5 w-3.5 inline mr-1 text-emerald-500" /> Interactive Checklist
+                              </label>
+                              <div className="flex items-center space-x-1.5">
+                                {user?.uid === liveInspectingTask.creatorId && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsReportOpen(true)}
+                                    className="text-[9px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-150 border border-indigo-150 px-2 py-0.5 rounded-md transition cursor-pointer flex items-center space-x-1"
+                                  >
+                                    <BarChart3 className="h-2.5 w-2.5" />
+                                    <span>Progress Report</span>
+                                  </button>
+                                )}
+                                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md font-mono">
+                                  {completedCount} of {visibleSubtasks.length} done
+                                </span>
                               </div>
-                            ))}
-                          </div>
-                        )}
+                            </div>
 
-                        {/* Add subtask item inline input */}
-                        <form
-                          onSubmit={(e) => {
-                            e.preventDefault();
-                            if (newSubtaskTitle.trim()) {
-                              handleAddSubtask(liveInspectingTask, newSubtaskTitle.trim());
-                              setNewSubtaskTitle('');
-                            }
-                          }}
-                          className="flex space-x-1.5"
-                        >
-                          <input
-                            type="text"
-                            required
-                            placeholder="Add item to checklist..."
-                            value={newSubtaskTitle}
-                            onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                            className="flex-1 text-xs px-3 py-2 bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 rounded-xl outline-none transition"
-                          />
-                          <button
-                            type="submit"
-                            className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-sm"
-                          >
-                            Add
-                          </button>
-                        </form>
-                      </div>
+                            {/* Progress dynamic gauge */}
+                            <div className="mb-3.5 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200/40">
+                              <div 
+                                className="h-full bg-emerald-500 transition-all duration-350"
+                                style={{ width: `${(completedCount / visibleSubtasks.length) * 100}%` }}
+                              />
+                            </div>
+
+                            {/* List subtasks items */}
+                            <div className="space-y-2 max-h-[220px] overflow-y-auto subtle-scroll mb-3">
+                              {visibleSubtasks.map(sub => {
+                                let canToggle = false;
+                                if (sub.assigneeType === 'individual') {
+                                  canToggle = true;
+                                } else if (sub.assigneeType === 'specific') {
+                                  const assignedUids = Array.isArray(sub.assignedTo) ? sub.assignedTo : [sub.assignedTo].filter(Boolean);
+                                  canToggle = assignedUids.includes(user?.uid);
+                                } else {
+                                  canToggle = liveInspectingTask.assignees?.some(a => a.uid === user?.uid) || liveInspectingTask.assigneeId === user?.uid;
+                                }
+                                
+                                const isCompleted = sub.assigneeType === 'individual'
+                                  ? sub.completedBy?.includes(user?.uid)
+                                  : sub.completed;
+
+                                let assignmentBadge = null;
+                                if (sub.assigneeType === 'specific') {
+                                  const assignedUids = Array.isArray(sub.assignedTo) ? sub.assignedTo : [sub.assignedTo].filter(Boolean);
+                                  const names = assignedUids.map(uid => {
+                                    const m = members.find(member => member.uid === uid);
+                                    return m ? (m.displayName || m.email.split('@')[0]) : '';
+                                  }).filter(Boolean);
+                                  
+                                  assignmentBadge = (
+                                    <span 
+                                      className="text-[9px] px-1.5 py-0.5 rounded-md bg-indigo-50 border border-indigo-100 text-indigo-600 font-bold ml-2 shrink-0 truncate max-w-[120px]"
+                                      title={names.join(', ')}
+                                    >
+                                      @{names.length > 1 ? `${names.length} members` : (names[0] || 'specific user')}
+                                    </span>
+                                  );
+                                } else if (sub.assigneeType === 'individual') {
+                                  assignmentBadge = (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-100 text-amber-600 font-bold ml-2 shrink-0">
+                                      indiv
+                                    </span>
+                                  );
+                                }
+
+                                const isTaskCreator = user?.uid === liveInspectingTask.creatorId;
+
+                                return (
+                                  <div key={sub.id} className="space-y-1">
+                                    {canToggle ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleSubtaskViewMode(liveInspectingTask, sub.id)}
+                                        className="w-full flex items-center space-x-2.5 px-3 py-2 border border-slate-200 rounded-xl bg-slate-50/50 hover:bg-slate-100/50 transition-colors text-left cursor-pointer min-w-0"
+                                      >
+                                        {isCompleted ? (
+                                          <CheckSquare className="h-4 w-4 text-emerald-500 shrink-0" />
+                                        ) : (
+                                          <Square className="h-4 w-4 text-slate-350 hover:text-slate-550 shrink-0" />
+                                        )}
+                                        <span className={`text-xs font-semibold truncate ${isCompleted ? 'line-through text-slate-400' : 'text-slate-700'}`}>{sub.title}</span>
+                                        {assignmentBadge}
+                                      </button>
+                                    ) : (
+                                      <div 
+                                        className="flex items-center space-x-2.5 px-3 py-2 border border-slate-200 rounded-xl bg-slate-50/30 cursor-not-allowed min-w-0"
+                                        title="You are not authorized to check/uncheck this checklist item"
+                                      >
+                                        {isCompleted ? (
+                                          <CheckSquare className="h-4 w-4 text-emerald-305 shrink-0" />
+                                        ) : (
+                                          <Square className="h-4 w-4 text-slate-300 shrink-0" />
+                                        )}
+                                        <span className={`text-xs font-semibold truncate ${isCompleted ? 'line-through text-slate-400' : 'text-slate-400'}`}>{sub.title}</span>
+                                        {assignmentBadge}
+                                      </div>
+                                    )}
+
+                                    {/* Creator/Manager completion tracker UI */}
+                                    {isTaskCreator && (
+                                      <div className="flex flex-wrap items-center gap-1.5 px-3 py-1 bg-slate-50/20 border border-slate-100/50 rounded-xl text-[10px] text-slate-500">
+                                        <span className="font-semibold text-slate-400 mr-1">Status:</span>
+                                        {sub.assigneeType === 'individual' ? (
+                                          <div className="flex flex-wrap items-center gap-1">
+                                            {members.map(m => {
+                                              const completed = sub.completedBy?.includes(m.uid);
+                                              const name = m.displayName || m.email.split('@')[0];
+                                              const initials = name.slice(0, 2).toUpperCase();
+                                              return (
+                                                <div 
+                                                  key={m.uid}
+                                                  className={`relative w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold border transition-all ${
+                                                    completed 
+                                                      ? 'bg-emerald-50 border-emerald-500 text-emerald-700' 
+                                                      : 'bg-slate-55 border-slate-200 text-slate-400 opacity-60'
+                                                  }`}
+                                                  title={`${name} - ${completed ? 'Completed' : 'Pending'}`}
+                                                >
+                                                  {m.photoURL ? (
+                                                    <img 
+                                                      src={m.photoURL} 
+                                                      alt={name} 
+                                                      className="w-full h-full rounded-full object-cover"
+                                                    />
+                                                  ) : (
+                                                    <span>{initials}</span>
+                                                  )}
+                                                  {completed && (
+                                                    <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-emerald-500 border border-white rounded-full flex items-center justify-center" />
+                                                  )}
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        ) : (
+                                          <div className="flex items-center gap-1">
+                                            {sub.assigneeType === 'specific' ? (
+                                              <>
+                                                <span className="font-medium text-slate-600">
+                                                  {(Array.isArray(sub.assignedTo) ? sub.assignedTo : [sub.assignedTo].filter(Boolean)).map(uid => {
+                                                    const m = members.find(member => member.uid === uid);
+                                                    return m ? (m.displayName || m.email.split('@')[0]) : '';
+                                                  }).filter(Boolean).join(', ')}
+                                                </span>
+                                                <span className={`px-1.5 py-0.5 rounded font-semibold text-[8px] uppercase tracking-wider ${sub.completed ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                                                  {sub.completed ? 'Completed' : 'Pending'}
+                                                </span>
+                                              </>
+                                            ) : (
+                                              <>
+                                                <span className="font-medium text-slate-600">Anyone</span>
+                                                <span className={`px-1.5 py-0.5 rounded font-semibold text-[8px] uppercase tracking-wider ${sub.completed ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                                                  {sub.completed ? 'Completed' : 'Pending'}
+                                                </span>
+                                              </>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* --- ATTACHMENTS HUB (External URLs) --- */}
                       <div className="pt-4.5 mt-5 border-t border-slate-100">
@@ -1288,7 +2039,7 @@ export const KanbanBoard = ({ boardId }) => {
                             </div>
                             <button
                               type="button"
-                              disabled={!customUrl.trim()}
+                              disabled={isSubmitting || !customUrl.trim()}
                               onClick={() => {
                                 handleAddLinkAttachment(liveInspectingTask, customUrlName, customUrl);
                                 setCustomUrl('');
@@ -1297,7 +2048,7 @@ export const KanbanBoard = ({ boardId }) => {
                               className="w-full py-1.5 bg-slate-150 hover:bg-slate-200 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-[10px] font-bold transition flex items-center justify-center gap-1 cursor-pointer"
                             >
                               <Link2 className="h-3 w-3" /> 
-                              <span>Add Custom Attachment Link</span>
+                              <span>{isSubmitting ? 'Adding Link...' : 'Add Custom Attachment Link'}</span>
                             </button>
                           </div>
                         </div>
@@ -1353,8 +2104,24 @@ export const KanbanBoard = ({ boardId }) => {
                       {/* Assignee / Meta cards block */}
                       <div className="grid grid-cols-2 gap-4 pt-5 mt-5 border-t border-slate-100">
                         <div>
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1.5">Assignee</span>
-                          {liveInspectingTask.assigneeName ? (
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1.5">Assignees</span>
+                          {liveInspectingTask.assignees && liveInspectingTask.assignees.length > 0 ? (
+                            <div className="flex flex-col space-y-1.5 max-h-[120px] overflow-y-auto pr-1">
+                              {liveInspectingTask.assignees.map((assignee) => (
+                                <div key={assignee.uid} className="flex items-center space-x-2 bg-slate-50 border border-slate-200/50 rounded-xl p-2">
+                                  <img
+                                    src={assignee.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(assignee.displayName)}`}
+                                    alt={assignee.displayName}
+                                    referrerPolicy="no-referrer"
+                                    className="h-6 w-6 rounded-lg object-cover"
+                                  />
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-bold text-slate-800 leading-tight truncate">{assignee.displayName}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : liveInspectingTask.assigneeName ? (
                             <div className="flex items-center space-x-2.5 font-sans bg-slate-50 border border-slate-200/50 rounded-xl p-2.5">
                               <img
                                 src={liveInspectingTask.assigneePhoto || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(liveInspectingTask.assigneeName)}`}
@@ -1390,28 +2157,24 @@ export const KanbanBoard = ({ boardId }) => {
 
                     {/* --- INNER COLLABORATIVE COMMENTS THREAD --- */}
                     <div className="border-t border-slate-100 pt-5 mt-5">
-                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center space-x-1.5 mb-2.5">
-                        <MessageSquare className="h-3.5 w-3.5" />
-                        <span>Interactive Board Thread (Comments)</span>
-                      </h4>
-
-                      <form onSubmit={handleAddComment} className="flex space-x-2">
-                        <input
-                          type="text"
-                          required
-                          placeholder="Add comment, discuss, or leave logs..."
-                          value={commentText}
-                          onChange={(e) => setCommentText(e.target.value)}
-                          className="flex-1 text-xs px-3.5 py-2 bg-slate-50 border border-slate-200 focus:bg-white focus:border-indigo-500 rounded-xl outline-none transition"
-                        />
-                        <button
-                          type="submit"
-                          disabled={!commentText.trim()}
-                          className="py-2 px-3 bg-slate-900 border border-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 rounded-xl text-xs font-bold transition flex items-center justify-center cursor-pointer shadow-sm"
-                        >
-                          <Send className="h-3.5 w-3.5" />
-                        </button>
-                      </form>
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-[10px] font-bold text-slate-450 uppercase tracking-widest flex items-center space-x-1.5">
+                          <MessageSquare className="h-3.5 w-3.5 text-slate-400" />
+                          <span>Collaborative Discussion</span>
+                        </h4>
+                        <span className="text-[10px] font-bold text-slate-555 bg-slate-100 border border-slate-200/50 px-2 py-0.5 rounded-md font-mono">
+                          {(liveInspectingTask?.comments || []).length} comment{(liveInspectingTask?.comments || []).length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                      
+                      <button
+                        type="button"
+                        onClick={() => setIsCommentsOpen(true)}
+                        className="mt-3.5 w-full py-2.5 px-4 bg-slate-50 border border-slate-200 hover:bg-slate-100/80 hover:border-slate-300 text-slate-700 hover:text-slate-900 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-2 cursor-pointer shadow-2xs"
+                      >
+                        <MessageSquare className="h-4 w-4" />
+                        <span>Open Task Discussion Thread</span>
+                      </button>
                     </div>
                   </div>
                 )}
@@ -1420,6 +2183,30 @@ export const KanbanBoard = ({ boardId }) => {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Task Checklist Progress Audit Report Modal */}
+      {isReportOpen && (
+        <TaskProgressReportModal
+          isOpen={isReportOpen}
+          onClose={() => setIsReportOpen(false)}
+          task={liveInspectingTask}
+          members={members}
+        />
+      )}
+
+      {/* Task Comments Chat Modal */}
+      {isCommentsOpen && (
+        <TaskCommentsModal
+          isOpen={isCommentsOpen}
+          onClose={() => setIsCommentsOpen(false)}
+          task={liveInspectingTask}
+          boardId={boardId}
+          user={user}
+          profile={profile}
+          updateTaskDetails={updateTaskDetails}
+          addActivityLog={addActivityLog}
+        />
+      )}
     </div>
   );
 };

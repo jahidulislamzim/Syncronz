@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyFirebaseToken } from '../../../../src/lib/firebase/auth.js';
-import { getBoardDriveConnection, getDriveAccessTokenForBoard } from '../../../../src/lib/drive-connection.js';
-import { initResumableUpload, setPublicPermission, getFileMetadata } from '../../../../src/lib/drive.js';
+import { getConnectionById, getConnectionAccessToken } from '../../../../src/lib/drive-connection.js';
+import { initResumableUpload, setPublicPermission, getFileMetadata, ensureFolder } from '../../../../src/lib/drive.js';
 import { readDocument } from '../../../../src/lib/firebase/firestore.js';
 
 export async function POST(request) {
@@ -36,21 +36,35 @@ export async function POST(request) {
     }
 
     const board = await readDocument('boards', boardId, idToken);
-    if (!board?.driveConnectionId) {
-      return NextResponse.json({ error: 'Board does not have a Drive connection assigned' }, { status: 400 });
-    }
-
     let accessToken;
     let folderId;
 
-    if (board.driveFolderId) {
-      folderId = board.driveFolderId;
-      accessToken = await getDriveAccessTokenForBoard(boardId, idToken);
-    } else {
-      const connection = await getBoardDriveConnection(boardId, idToken);
-      const { getConnectionAccessToken } = await import('../../../../src/lib/drive-connection.js');
+    if (board?.driveConnectionId) {
+      const connection = await getConnectionById(board.driveConnectionId, idToken);
+      if (!connection) {
+        return NextResponse.json({ error: 'Assigned Drive connection not found' }, { status: 400 });
+      }
       accessToken = await getConnectionAccessToken(connection, idToken);
-      const { ensureFolder } = await import('../../../../src/lib/drive.js');
+
+      if (board.driveFolderId) {
+        folderId = board.driveFolderId;
+      } else {
+        const safeBoardName = (boardName || boardId).replace(/[^a-zA-Z0-9 _-]/g, '').trim() || boardId;
+        folderId = await ensureFolder(accessToken, ['Syncronz', safeBoardName]);
+      }
+    } else {
+      // Fallback: check for legacy global settings/drive SA
+      const driveData = await readDocument('settings', 'drive', idToken);
+      if (!driveData?.encryptedKey) {
+        return NextResponse.json({ error: 'Google Drive not configured for this board' }, { status: 400 });
+      }
+      const { decrypt } = await import('../../../../src/lib/crypto.js');
+      const { getAccessToken } = await import('../../../../src/lib/drive-auth.js');
+      const keyHex = process.env.SMTP_ENCRYPTION_KEY;
+      const decrypted = decrypt(driveData.encryptedKey, keyHex);
+      const saJson = JSON.parse(decrypted);
+      accessToken = await getAccessToken(saJson);
+
       const safeBoardName = (boardName || boardId).replace(/[^a-zA-Z0-9 _-]/g, '').trim() || boardId;
       folderId = await ensureFolder(accessToken, ['Syncronz', safeBoardName]);
     }

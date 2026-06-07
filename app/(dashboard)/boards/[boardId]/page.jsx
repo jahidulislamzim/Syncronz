@@ -32,7 +32,7 @@ export default function BoardDetail() {
         <KanbanBoard boardId={boardId} />
       </div>
       <div className="w-full lg:w-[280px] shrink-0 space-y-6">
-        <MembersRoster boardId={boardId} creatorId={board?.creatorId || ''} />
+        <MembersRoster boardId={boardId} creatorId={board?.creatorId || ''} boardName={board?.name || 'Project Board'} />
         <ActivityLog boardId={boardId} />
       </div>
     </div>

@@ -6,7 +6,7 @@ import { useAuth } from '../../../src/context/AuthContext.jsx';
 import { auth } from '../../../src/lib/firebase/client.js';
 import { collection, query, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../src/lib/firebase/client.js';
-import { Settings, Save, CheckCircle, AlertTriangle, Eye, EyeOff, X, Sparkles, HardDrive, RefreshCw, FileText, FolderOpen, ExternalLink, Trash2, Plus, Mail, UserCheck, Unlink } from 'lucide-react';
+import { Settings, Save, CheckCircle, AlertTriangle, Eye, EyeOff, X, Sparkles, HardDrive, RefreshCw, FileText, FolderOpen, ExternalLink, Trash2, Plus, Mail, UserCheck, Unlink, Key, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const Toast = ({ message, type, onClose }) => (
@@ -123,12 +123,64 @@ export default function SettingsPage() {
     }
   };
 
+  // ─── Edit Connection Credentials State ───────────────────────
+  const [editCredsConnection, setEditCredsConnection] = useState(null);
+  const [editCredsForm, setEditCredsForm] = useState({ clientId: '', clientSecret: '' });
+  const [savingCreds, setSavingCreds] = useState(false);
+  const [showEditCredsSecret, setShowEditCredsSecret] = useState(false);
+
+
+  const handleSaveConnCreds = async () => {
+    if (!editCredsConnection) return;
+    setSavingCreds(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/drive-connections', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          connectionId: editCredsConnection.connectionId,
+          clientId: editCredsForm.clientId,
+          clientSecret: editCredsForm.clientSecret,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to update credentials');
+      }
+      const data = await res.json();
+      // Update local connections list
+      setConnections((prev) =>
+        prev.map((c) =>
+          c.connectionId === editCredsConnection.connectionId
+            ? { ...c, clientId: data.connection.clientId, hasCustomCredentials: data.connection.hasCustomCredentials }
+            : c
+        )
+      );
+      showToast('Credentials saved successfully', 'success');
+      setEditCredsConnection(null);
+      setEditCredsForm({ clientId: '', clientSecret: '' });
+      setShowEditCredsSecret(false);
+    } catch (e) {
+      showToast(e.message || 'Failed to save credentials', 'error');
+    } finally {
+      setSavingCreds(false);
+    }
+  };
+
   // ─── Google Drive Connections State ──────────────────────────
   const [driveLoading, setDriveLoading] = useState(true);
   const [connections, setConnections] = useState([]);
   const [connectingDrive, setConnectingDrive] = useState(false);
   const [showDriveNamePopup, setShowDriveNamePopup] = useState(false);
   const [driveName, setDriveName] = useState('');
+  const [useCustomDriveCreds, setUseCustomDriveCreds] = useState(false);
+  const [customDriveClientId, setCustomDriveClientId] = useState('');
+  const [customDriveClientSecret, setCustomDriveClientSecret] = useState('');
+  const [showCustomDriveSecret, setShowCustomDriveSecret] = useState(false);
 
   // ─── Board Drive Management State ────────────────────────────
   const [boards, setBoards] = useState([]);
@@ -197,6 +249,18 @@ export default function SettingsPage() {
       const refreshToken = result._tokenResponse?.oauthRefreshToken || null;
       const label = driveName.trim() || result.user.email;
 
+      const bodyPayload = {
+        accessToken: credential.accessToken,
+        refreshToken,
+        googleEmail: result.user.email,
+        label,
+      };
+
+      if (useCustomDriveCreds && customDriveClientId && customDriveClientSecret) {
+        bodyPayload.clientId = customDriveClientId;
+        bodyPayload.clientSecret = customDriveClientSecret;
+      }
+
       const token = await auth.currentUser?.getIdToken();
       const res = await fetch('/api/drive-connections', {
         method: 'POST',
@@ -204,12 +268,7 @@ export default function SettingsPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          accessToken: credential.accessToken,
-          refreshToken,
-          googleEmail: result.user.email,
-          label,
-        }),
+        body: JSON.stringify(bodyPayload),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -217,6 +276,9 @@ export default function SettingsPage() {
       }
       showToast(`Connected ${label}`, 'success');
       setDriveName('');
+      setUseCustomDriveCreds(false);
+      setCustomDriveClientId('');
+      setCustomDriveClientSecret('');
       setShowDriveNamePopup(false);
       const refreshRes = await fetch('/api/drive-connections', {
         headers: { Authorization: `Bearer ${token}` },
@@ -504,9 +566,11 @@ export default function SettingsPage() {
       {/* Google Drive Tab */}
       {activeTab === 'drive' && (
         <>
+
           {/* Connected Google Accounts */}
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
             <div className="p-6 md:p-8 space-y-5">
+
               <div className="flex items-center gap-3 pb-2 border-b border-slate-100">
                 <HardDrive className="w-5 h-5 text-emerald-500 shrink-0" />
                 <div>
@@ -534,15 +598,34 @@ export default function SettingsPage() {
                               Connected {conn.createdAt ? new Date(conn.createdAt).toLocaleDateString() : ''}
                               {boardCount > 0 && ` · ${boardCount} board(s) assigned`}
                             </p>
+                            {conn.hasCustomCredentials && (
+                              <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 bg-indigo-50 border border-indigo-100 text-indigo-700 text-[9px] font-extrabold rounded-md uppercase tracking-wider">
+                                <Sparkles className="w-2.5 h-2.5 text-indigo-500 shrink-0" /> Custom credentials: {conn.clientId ? `${conn.clientId.substring(0, 15)}...` : 'Active'}
+                              </span>
+                            )}
                           </div>
                         </div>
-                        <button
-                          onClick={() => handleRemoveConnection(conn.connectionId)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:border-red-300 hover:text-red-600 text-slate-500 rounded-lg text-[11px] font-bold transition cursor-pointer shrink-0"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          Remove
-                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => {
+                              setEditCredsConnection(conn);
+                              setEditCredsForm({ clientId: conn.clientId || '', clientSecret: '' });
+                              setShowEditCredsSecret(false);
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:border-indigo-300 hover:text-indigo-600 text-slate-500 rounded-lg text-[11px] font-bold transition cursor-pointer"
+                            title="Manage API Credentials"
+                          >
+                            <Key className="w-3.5 h-3.5" />
+                            Credentials
+                          </button>
+                          <button
+                            onClick={() => handleRemoveConnection(conn.connectionId)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:border-red-300 hover:text-red-600 text-slate-500 rounded-lg text-[11px] font-bold transition cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Remove
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -768,6 +851,56 @@ export default function SettingsPage() {
                     <p className="text-[11px] text-slate-400">This name will appear in dropdowns when assigning Drive to boards. Connecting does not assign this Drive to any board — use the Board Assignments section below to assign it.</p>
                   </div>
 
+                  <div className="space-y-3 pt-2 border-t border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="useCustomDriveCreds"
+                        checked={useCustomDriveCreds}
+                        onChange={(e) => setUseCustomDriveCreds(e.target.checked)}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      />
+                      <label htmlFor="useCustomDriveCreds" className="text-xs font-bold text-slate-700 cursor-pointer">
+                        Use custom Google API credentials for this connection
+                      </label>
+                    </div>
+
+                    {useCustomDriveCreds && (
+                      <div className="space-y-3 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl animate-fade-in">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">Google Client ID</label>
+                          <input
+                            type="text"
+                            value={customDriveClientId}
+                            onChange={(e) => setCustomDriveClientId(e.target.value)}
+                            placeholder="xxx.apps.googleusercontent.com"
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">Google Client Secret</label>
+                          <div className="relative">
+                            <input
+                              type={showCustomDriveSecret ? 'text' : 'password'}
+                              value={customDriveClientSecret}
+                              onChange={(e) => setCustomDriveClientSecret(e.target.value)}
+                              placeholder="GOCSPX-xxxx"
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition pr-8"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowCustomDriveSecret(!showCustomDriveSecret)}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                            >
+                              {showCustomDriveSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex gap-3">
                     <button
                       onClick={() => setShowDriveNamePopup(false)}
@@ -786,6 +919,124 @@ export default function SettingsPage() {
                         <Plus className="w-4 h-4" />
                       )}
                       {connectingDrive ? 'Authorizing...' : 'Continue to Google Auth'}
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Manage Credentials Popup */}
+          <AnimatePresence>
+            {editCredsConnection && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+                onClick={(e) => { if (e.target === e.currentTarget) { setEditCredsConnection(null); } }}
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                  className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-5"
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-indigo-50 rounded-xl">
+                        <Key className="w-5 h-5 text-indigo-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-extrabold text-slate-900">Manage API Credentials</p>
+                        <p className="text-xs text-slate-500 truncate max-w-[220px]">{editCredsConnection.label || editCredsConnection.googleEmail}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setEditCredsConnection(null)}
+                      className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Status badge */}
+                  <div className={`flex items-center gap-2.5 px-4 py-3 rounded-2xl border ${editCredsConnection.hasCustomCredentials ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-200'}`}>
+                    <ShieldCheck className={`w-5 h-5 shrink-0 ${editCredsConnection.hasCustomCredentials ? 'text-indigo-600' : 'text-slate-400'}`} />
+                    <div>
+                      <p className={`text-xs font-bold ${editCredsConnection.hasCustomCredentials ? 'text-indigo-800' : 'text-slate-600'}`}>
+                        {editCredsConnection.hasCustomCredentials ? 'Custom credentials are active' : 'Using global / environment credentials'}
+                      </p>
+                      {editCredsConnection.hasCustomCredentials && editCredsConnection.clientId && (
+                        <p className="text-[10px] text-indigo-500 mt-0.5 font-mono truncate">{editCredsConnection.clientId}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Form */}
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Google Client ID</label>
+                      <input
+                        type="text"
+                        value={editCredsForm.clientId}
+                        onChange={(e) => setEditCredsForm(prev => ({ ...prev, clientId: e.target.value }))}
+                        placeholder="xxx.apps.googleusercontent.com"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        Google Client Secret
+                        {editCredsConnection.hasCustomCredentials && (
+                          <span className="ml-2 font-normal text-slate-400 normal-case tracking-normal">(enter new value to update)</span>
+                        )}
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showEditCredsSecret ? 'text' : 'password'}
+                          value={editCredsForm.clientSecret}
+                          onChange={(e) => setEditCredsForm(prev => ({ ...prev, clientSecret: e.target.value }))}
+                          placeholder={editCredsConnection.hasCustomCredentials ? '••••••••  (leave blank to keep existing)' : 'GOCSPX-xxxx'}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowEditCredsSecret(!showEditCredsSecret)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                        >
+                          {showEditCredsSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Info note */}
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    These credentials override the global OAuth settings for this specific connection only. Leave both fields empty to clear and revert to global credentials.
+                  </p>
+
+                  {/* Actions */}
+                  <div className="flex gap-3 pt-1">
+                    <button
+                      onClick={() => setEditCredsConnection(null)}
+                      className="flex-1 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveConnCreds}
+                      disabled={savingCreds}
+                      className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      {savingCreds ? (
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <Save className="w-4 h-4" />
+                      )}
+                      {savingCreds ? 'Saving...' : 'Save Credentials'}
                     </button>
                   </div>
                 </motion.div>

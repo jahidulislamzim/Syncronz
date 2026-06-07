@@ -320,6 +320,9 @@ export async function createTask(boardId, title, description, priority, dueDate,
     const taskRef = doc(db, 'boards', boardId, 'tasks', taskId);
     const now = serverTimestamp();
 
+    const assigneesList = Array.isArray(assignee) ? assignee : (assignee ? [assignee] : []);
+    const primaryAssignee = assigneesList[0] || null;
+
     await setDoc(taskRef, {
       taskId,
       boardId,
@@ -328,9 +331,10 @@ export async function createTask(boardId, title, description, priority, dueDate,
       status: TaskStatus.TODO,
       priority,
       dueDate: dueDate || '',
-      assigneeId: assignee?.uid || '',
-      assigneeName: assignee?.displayName || '',
-      assigneePhoto: assignee?.photoURL || '',
+      assigneeId: primaryAssignee?.uid || '',
+      assigneeName: primaryAssignee?.displayName || '',
+      assigneePhoto: primaryAssignee?.photoURL || '',
+      assignees: assigneesList,
       creatorId: creator.uid,
       createdAt: now,
       updatedAt: now
@@ -345,19 +349,23 @@ export async function createTask(boardId, title, description, priority, dueDate,
       `created task "${title}"`
     );
 
-    if (assignee && assignee.uid !== creator.uid) {
+    if (assigneesList.length > 0) {
       const boardDoc = await getDoc(doc(db, 'boards', boardId));
       const boardName = boardDoc.exists() ? boardDoc.data().name : 'Project Board';
 
-      await addNotification(
-        assignee.uid,
-        boardId,
-        boardName,
-        taskId,
-        'Task Assigned to You',
-        `${creator.displayName} assigned "${title}" to you on board "${boardName}"`,
-        NotificationType.ASSIGNMENT
-      );
+      for (const singleAssignee of assigneesList) {
+        if (singleAssignee.uid !== creator.uid) {
+          await addNotification(
+            singleAssignee.uid,
+            boardId,
+            boardName,
+            taskId,
+            'Task Assigned to You',
+            `${creator.displayName} assigned "${title}" to you on board "${boardName}"`,
+            NotificationType.ASSIGNMENT
+          );
+        }
+      }
     }
 
     return taskId;
@@ -430,20 +438,38 @@ export async function updateTaskDetails(boardId, taskId, fields, user) {
 
     const oldTask = taskSnap.data();
 
+    // Sync legacy fields if assignees array is provided
+    if (fields.assignees !== undefined) {
+      const assigneesList = Array.isArray(fields.assignees) ? fields.assignees : (fields.assignees ? [fields.assignees] : []);
+      const primaryAssignee = assigneesList[0] || null;
+      fields.assigneeId = primaryAssignee?.uid || '';
+      fields.assigneeName = primaryAssignee?.displayName || '';
+      fields.assigneePhoto = primaryAssignee?.photoURL || '';
+    }
+
     await updateDoc(taskRef, {
       ...fields,
       updatedAt: serverTimestamp()
     });
 
     const hasAssigneeChanged = fields.assigneeId !== undefined && fields.assigneeId !== oldTask.assigneeId;
+    const hasAssigneesListChanged = fields.assignees !== undefined;
 
-    if (hasAssigneeChanged) {
+    if (hasAssigneesListChanged || hasAssigneeChanged) {
       const actorName = user.displayName;
       const title = oldTask.title;
       const boardDoc = await getDoc(doc(db, 'boards', boardId));
       const boardName = boardDoc.exists() ? boardDoc.data().name : 'Project Board';
 
-      const assigneeMsg = fields.assigneeName ? `assigned task "${title}" to ${fields.assigneeName}` : `removed assignee from task "${title}"`;
+      const oldUids = new Set((oldTask.assignees || (oldTask.assigneeId ? [{ uid: oldTask.assigneeId, displayName: oldTask.assigneeName }] : [])).map(a => a.uid));
+      const newAssignees = Array.isArray(fields.assignees) ? fields.assignees : (fields.assignees ? [fields.assignees] : []);
+      
+      const newlyAssigned = newAssignees.filter(a => !oldUids.has(a.uid));
+
+      const assigneeMsg = newAssignees.length > 0 
+        ? `assigned task "${title}" to ${newAssignees.map(a => a.displayName).join(', ')}` 
+        : `removed assignee from task "${title}"`;
+
       await addActivityLog(
         boardId,
         ActivityType.TASK_ASSIGNED,
@@ -453,16 +479,18 @@ export async function updateTaskDetails(boardId, taskId, fields, user) {
         assigneeMsg
       );
 
-      if (fields.assigneeId && fields.assigneeId !== user.uid) {
-        await addNotification(
-          fields.assigneeId,
-          boardId,
-          boardName,
-          taskId,
-          'Task Assigned to You',
-          `${actorName} assigned "${title}" to you on board "${boardName}"`,
-          NotificationType.ASSIGNMENT
-        );
+      for (const singleAssignee of newlyAssigned) {
+        if (singleAssignee.uid !== user.uid) {
+          await addNotification(
+            singleAssignee.uid,
+            boardId,
+            boardName,
+            taskId,
+            'Task Assigned to You',
+            `${actorName} assigned "${title}" to you on board "${boardName}"`,
+            NotificationType.ASSIGNMENT
+          );
+        }
       }
     } else {
       await addActivityLog(
