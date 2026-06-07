@@ -8,6 +8,7 @@ import { collection, query, orderBy, limit, onSnapshot, doc } from 'firebase/fir
 import { Bell, Check, Trash2, Shield, Radio, Sparkles, LogOut, Menu } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { markNotificationAsRead, clearAllNotifications } from '../lib/firebase/firestore.js';
+import { NotificationType } from '../types.js';
 
 export const Header = ({ currentBoardName: propBoardName, onOpenBoardSelector: propSelector, onToggleSidebar }) => {
   const { user, profile, signOut } = useAuth();
