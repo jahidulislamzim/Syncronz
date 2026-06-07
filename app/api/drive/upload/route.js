@@ -36,35 +36,21 @@ export async function POST(request) {
     }
 
     const board = await readDocument('boards', boardId, idToken);
-    let accessToken;
-    let folderId;
+    if (!board?.driveConnectionId) {
+      return NextResponse.json({
+        error: 'This board does not have a Google Drive connection assigned. Go to Settings → Google Drive → Board Assignments to assign one.'
+      }, { status: 400 });
+    }
 
-    if (board?.driveConnectionId) {
-      const connection = await getConnectionById(board.driveConnectionId, idToken);
-      if (!connection) {
-        return NextResponse.json({ error: 'Assigned Drive connection not found' }, { status: 400 });
-      }
-      accessToken = await getConnectionAccessToken(connection, idToken);
+    const connection = await getConnectionById(board.driveConnectionId, idToken);
+    if (!connection) {
+      return NextResponse.json({ error: 'Assigned Drive connection not found' }, { status: 400 });
+    }
 
-      if (board.driveFolderId) {
-        folderId = board.driveFolderId;
-      } else {
-        const safeBoardName = (boardName || boardId).replace(/[^a-zA-Z0-9 _-]/g, '').trim() || boardId;
-        folderId = await ensureFolder(accessToken, ['Syncronz', safeBoardName]);
-      }
-    } else {
-      // Fallback: check for legacy global settings/drive SA
-      const driveData = await readDocument('settings', 'drive', idToken);
-      if (!driveData?.encryptedKey) {
-        return NextResponse.json({ error: 'Google Drive not configured for this board' }, { status: 400 });
-      }
-      const { decrypt } = await import('../../../../src/lib/crypto.js');
-      const { getAccessToken } = await import('../../../../src/lib/drive-auth.js');
-      const keyHex = process.env.SMTP_ENCRYPTION_KEY;
-      const decrypted = decrypt(driveData.encryptedKey, keyHex);
-      const saJson = JSON.parse(decrypted);
-      accessToken = await getAccessToken(saJson);
+    const accessToken = await getConnectionAccessToken(connection, idToken);
 
+    let folderId = board.driveFolderId;
+    if (!folderId) {
       const safeBoardName = (boardName || boardId).replace(/[^a-zA-Z0-9 _-]/g, '').trim() || boardId;
       folderId = await ensureFolder(accessToken, ['Syncronz', safeBoardName]);
     }

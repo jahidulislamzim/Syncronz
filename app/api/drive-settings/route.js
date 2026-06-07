@@ -3,7 +3,6 @@ import { encrypt } from '../../../src/lib/crypto.js';
 import { decrypt } from '../../../src/lib/crypto.js';
 import { verifyFirebaseToken } from '../../../src/lib/firebase/auth.js';
 import { readDocument, writeDocument } from '../../../src/lib/firebase/firestore.js';
-import { getAccessToken } from '../../../src/lib/drive-auth.js';
 
 export async function GET(request) {
   try {

@@ -101,3 +101,12 @@ export async function getFileMetadata(accessToken, fileId) {
   );
   return res.json();
 }
+
+export async function deleteFile(accessToken, fileId) {
+  await apiFetch(`${API_BASE}/files/${fileId}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+}

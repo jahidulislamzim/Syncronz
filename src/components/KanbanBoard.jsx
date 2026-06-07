@@ -619,6 +619,19 @@ export const KanbanBoard = ({ boardId }) => {
 
     setIsSubmitting(true);
     try {
+      const attachment = task.attachments?.find(a => a.id === attachmentId);
+      if (!attachment) throw new Error('Attachment not found');
+
+      if (attachment.driveFileId) {
+        const token = await auth.currentUser?.getIdToken();
+        if (token) {
+          await fetch(`/api/drive/files?boardId=${boardId}&fileId=${attachment.driveFileId}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        }
+      }
+
       const attachments = task.attachments ? [...task.attachments] : [];
       const updatedAttachments = attachments.filter(a => a.id !== attachmentId);
 
