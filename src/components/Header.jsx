@@ -15,6 +15,18 @@ export const Header = ({ currentBoardName: propBoardName, onOpenBoardSelector: p
   const navigate = useRouter();
   const params = useParams();
   const [boardName, setBoardName] = useState(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const handleSignOutClick = async () => {
+    setLoggingOut(true);
+    try {
+      await signOut();
+      navigate.replace('/login');
+    } catch (e) {
+      console.error(e);
+      setLoggingOut(false);
+    }
+  };
 
   // Derive board name from route or prop
   const boardId = params.boardId;
@@ -336,11 +348,16 @@ export const Header = ({ currentBoardName: propBoardName, onOpenBoardSelector: p
               <p className="text-xs font-bold text-slate-800 truncate max-w-[100px]">{profile.displayName}</p>
             </div>
             <button
-              onClick={signOut}
-              className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition cursor-pointer"
+              onClick={handleSignOutClick}
+              disabled={loggingOut}
+              className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition cursor-pointer disabled:opacity-50"
               title="Sign Out"
             >
-              <LogOut className="h-4 w-4" />
+              {loggingOut ? (
+                <span className="w-4 h-4 border-2 border-slate-400 border-t-slate-600 rounded-full animate-spin" />
+              ) : (
+                <LogOut className="h-4 w-4" />
+              )}
             </button>
           </div>
         )}

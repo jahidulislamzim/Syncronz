@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, deleteDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase/client.js';
 import { loginWithGoogle, logoutUser, loginWithEmail, registerWithEmail } from '../lib/firebase/auth.js';
 import { createUserProfile } from '../lib/firebase/firestore.js';
@@ -64,6 +64,15 @@ export const AuthProvider = ({ children }) => {
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           dbProfile = userDoc.exists() ? userDoc.data() : null;
 
+          const isGoogleUser = firebaseUser.providerData.some(p => p.providerId === 'google.com');
+          if (!dbProfile && isGoogleUser) {
+            const q = query(collection(db, 'users'), where('email', '==', emailLower));
+            const querySnapshot = await getDocs(q);
+            if (!querySnapshot.empty) {
+              dbProfile = querySnapshot.docs[0].data();
+            }
+          }
+
           if (dbProfile) {
             // Case 1: User exists in the users table
             if (dbProfile.isAuthorized || dbProfile.isAdmin || isSuperAdmin) {
@@ -124,8 +133,9 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       await loginWithGoogle();
-    } catch {
+    } catch (err) {
       setLoading(false);
+      throw err;
     }
   };
 
@@ -142,6 +152,12 @@ export const AuthProvider = ({ children }) => {
   const handleSignUpWithEmail = async (email, password, displayName) => {
     setLoading(true);
     try {
+      const emailLower = email.toLowerCase().trim();
+      const q = query(collection(db, 'users'), where('email', '==', emailLower));
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        throw new Error('auth/email-already-in-use');
+      }
       await registerWithEmail(email, password, displayName);
     } catch (err) {
       setLoading(false);

@@ -63,25 +63,48 @@ export async function createUserProfile(uid, displayName, photoURL, email) {
         isAdmin: shouldBeAdmin,
         isAuthorized: true
       }, { merge: true });
-    } else if (existing && !existing.exists()) {
-      await setDoc(userDocRef, {
-        uid,
-        email,
-        displayName: displayName || email.split('@')[0],
-        photoURL: photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName || email)}`,
-        lastActive: new Date().toISOString(),
-        joinedBoards: [],
-        isAdmin: shouldBeAdmin,
-        isAuthorized: true
-      });
-    } else if (existing) {
-      const data = existing.data();
-      await updateDoc(userDocRef, {
-        lastActive: new Date().toISOString(),
-        email: email || data?.email,
-        isAdmin: data && 'isAdmin' in data ? data.isAdmin : shouldBeAdmin,
-        isAuthorized: data && 'isAuthorized' in data ? data.isAuthorized : true
-      });
+    } else {
+      let existingByEmail = null;
+      let existingByEmailDocRef = null;
+
+      const q = query(collection(db, 'users'), where('email', '==', lowercaseEmail));
+      const querySnapshot = await getDocs(q);
+
+      const otherDocs = querySnapshot.docs.filter(doc => doc.id !== uid);
+      if (otherDocs.length > 0) {
+        existingByEmail = otherDocs[0].data();
+        existingByEmailDocRef = otherDocs[0].ref;
+      }
+
+      if (existing && !existing.exists()) {
+        if (existingByEmail) {
+          await setDoc(userDocRef, {
+            ...existingByEmail,
+            uid,
+            lastActive: new Date().toISOString(),
+          });
+          await deleteDoc(existingByEmailDocRef);
+        } else {
+          await setDoc(userDocRef, {
+            uid,
+            email,
+            displayName: displayName || email.split('@')[0],
+            photoURL: photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName || email)}`,
+            lastActive: new Date().toISOString(),
+            joinedBoards: [],
+            isAdmin: shouldBeAdmin,
+            isAuthorized: true
+          });
+        }
+      } else if (existing) {
+        const data = existing.data();
+        await updateDoc(userDocRef, {
+          lastActive: new Date().toISOString(),
+          email: email || data?.email,
+          isAdmin: data && 'isAdmin' in data ? data.isAdmin : shouldBeAdmin,
+          isAuthorized: data && 'isAuthorized' in data ? data.isAuthorized : true
+        });
+      }
     }
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);

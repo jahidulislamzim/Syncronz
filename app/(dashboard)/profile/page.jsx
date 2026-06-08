@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../../src/context/AuthContext.jsx';
 import { updateUserProfile } from '../../../src/lib/firebase/firestore.js';
 import { auth } from '../../../src/lib/firebase/client.js';
-import { updateProfile, updatePassword } from 'firebase/auth';
+import { updateProfile, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { 
   Sparkles, 
   User, 
@@ -32,6 +32,7 @@ export default function UserProfilePage() {
   const [avatarUrl, setAvatarUrl] = useState('');
 
   // Security settings state
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -79,6 +80,7 @@ export default function UserProfilePage() {
   // Check login provider
   const isGoogleUser = user?.providerData?.some(p => p.providerId === 'google.com');
   const isEmailUser = !isGoogleUser;
+  const hasPassword = user?.providerData?.some(p => p.providerId === 'password');
 
   // Computed preview photo URL
   const previewPhotoURL = avatarType === 'seed'
@@ -123,6 +125,10 @@ export default function UserProfilePage() {
 
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
+    if (hasPassword && !currentPassword) {
+      showToast('Please enter your current password.', 'error');
+      return;
+    }
     if (!newPassword) {
       showToast('Please enter a new password.', 'error');
       return;
@@ -139,8 +145,17 @@ export default function UserProfilePage() {
     setSavingSecurity(true);
     try {
       if (auth.currentUser) {
+        if (hasPassword) {
+          const email = auth.currentUser.email || user.email;
+          if (!email) {
+            throw new Error('User email not found.');
+          }
+          const credential = EmailAuthProvider.credential(email, currentPassword);
+          await reauthenticateWithCredential(auth.currentUser, credential);
+        }
         await updatePassword(auth.currentUser, newPassword);
         showToast('Password rotated successfully.', 'success');
+        setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
       } else {
@@ -148,7 +163,9 @@ export default function UserProfilePage() {
       }
     } catch (err) {
       console.error(err);
-      if (err instanceof Error && err.message.includes('auth/requires-recent-login')) {
+      if (err && (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential' || (err.message && (err.message.includes('auth/wrong-password') || err.message.includes('auth/invalid-credential'))))) {
+        showToast('Incorrect current password. Please try again.', 'error');
+      } else if (err instanceof Error && err.message.includes('auth/requires-recent-login')) {
         showToast('Security Action: Please sign out and sign back in to rotate your password.', 'error');
       } else {
         showToast(err instanceof Error ? err.message : 'Failed to update credentials.', 'error');
@@ -367,6 +384,26 @@ export default function UserProfilePage() {
                     <p className="text-[10px] text-slate-500 leading-normal">
                       Setting a password here enables password-based login for your account alongside Google popup login.
                     </p>
+                  </div>
+                </div>
+              )}
+
+              {hasPassword && (
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block">Current Password</label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                      <Lock className="h-4 w-4" />
+                    </span>
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      placeholder="••••••••"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 bg-slate-50/50 hover:bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:bg-white rounded-xl text-xs font-semibold text-slate-800 outline-none transition"
+                    />
                   </div>
                 </div>
               )}

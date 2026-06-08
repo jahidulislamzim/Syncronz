@@ -43,7 +43,20 @@ export default function DashboardLayout({ children }) {
   }, [user, loading, isAllowed, router]);
 
   if (loading) return <LoadingScreen />;
-  if (!user || !isAllowed) return null;
+
+  if (!user || !isAllowed) {
+    return (
+      <div className="flex h-screen w-screen bg-[#F8FAFC] font-sans text-slate-800 overflow-hidden">
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+          <Header onToggleSidebar={() => setSidebarOpen(v => !v)} />
+          <main className="flex-1 p-4 md:p-8 overflow-y-auto bg-[#F8FAFC] subtle-scroll flex flex-col justify-start">
+            {/* Empty content during redirect */}
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-screen bg-[#F8FAFC] font-sans text-slate-800 overflow-hidden">
