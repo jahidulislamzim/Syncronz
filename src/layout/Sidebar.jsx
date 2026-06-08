@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '../context/AuthContext.jsx';
 import { db } from '../lib/firebase/client.js';
 import { collection, query, onSnapshot } from 'firebase/firestore';
-import { Landmark, ShieldCheck, Plus, Timer, Settings, X } from 'lucide-react';
+import { Landmark, ShieldCheck, Plus, Timer, Settings, X, ChevronRight } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 export const Sidebar = ({ isOpen, onClose }) => {
@@ -132,20 +132,28 @@ export const Sidebar = ({ isOpen, onClose }) => {
 
   const profileBlock = (
     <div className="p-4 border-t border-slate-800/80 bg-slate-950/20 space-y-3">
-      <div className="flex items-center gap-3 bg-slate-800/20 p-2.5 rounded-xl border border-slate-800/30">
-        <img
-          src={profile?.photoURL || 'https://api.dicebear.com/7.x/initials/svg?seed=user'}
-          alt=""
-          className="w-8 h-8 rounded-full border border-slate-700 object-cover"
-        />
-        <div className="flex-1 overflow-hidden">
-          <p className="text-xs font-semibold text-white truncate">{profile?.displayName || 'Active Member'}</p>
-          <div className="flex items-center gap-1 mt-0.5">
-            <span className={`w-1.5 h-1.5 rounded-full ${profile?.isAdmin ? 'bg-indigo-400 animate-pulse' : 'bg-emerald-400'}`} />
-            <p className="text-[10px] text-slate-400 truncate font-mono">{profile?.isAdmin ? 'System Admin' : 'Member'}</p>
+      <Link 
+        href="/profile"
+        onClick={onClose}
+        className="w-full flex items-center justify-between gap-3 bg-slate-800/20 hover:bg-slate-800/40 p-2.5 rounded-xl border border-slate-800/30 transition cursor-pointer"
+      >
+        <div className="flex items-center gap-3 overflow-hidden">
+          <img
+            src={profile?.photoURL || 'https://api.dicebear.com/7.x/initials/svg?seed=user'}
+            alt=""
+            className="w-8 h-8 rounded-full border border-slate-700 object-cover shrink-0"
+            referrerPolicy="no-referrer"
+          />
+          <div className="flex-1 overflow-hidden text-left">
+            <p className="text-xs font-semibold text-white truncate">{profile?.displayName || 'Active Member'}</p>
+            <div className="flex items-center gap-1 mt-0.5">
+              <span className={`w-1.5 h-1.5 rounded-full ${profile?.isAdmin ? 'bg-indigo-400 animate-pulse' : 'bg-emerald-400'}`} />
+              <p className="text-[10px] text-slate-400 truncate font-mono">{profile?.isAdmin ? 'System Admin' : 'Member'}</p>
+            </div>
           </div>
         </div>
-      </div>
+        <ChevronRight className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+      </Link>
     </div>
   );
 

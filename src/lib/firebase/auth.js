@@ -1,4 +1,11 @@
-import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  signOut,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile
+} from 'firebase/auth';
 import { auth } from './client.js';
 
 const googleProvider = new GoogleAuthProvider();
@@ -6,6 +13,24 @@ const googleProvider = new GoogleAuthProvider();
 export async function loginWithGoogle() {
   if (!auth || !googleProvider) throw new Error('Firebase not initialized');
   const result = await signInWithPopup(auth, googleProvider);
+  return result.user;
+}
+
+export async function loginWithEmail(email, password) {
+  if (!auth) throw new Error('Firebase not initialized');
+  const result = await signInWithEmailAndPassword(auth, email, password);
+  return result.user;
+}
+
+export async function registerWithEmail(email, password, displayName) {
+  if (!auth) throw new Error('Firebase not initialized');
+  const result = await createUserWithEmailAndPassword(auth, email, password);
+  if (result.user) {
+    await updateProfile(result.user, {
+      displayName: displayName,
+      photoURL: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`
+    });
+  }
   return result.user;
 }
 

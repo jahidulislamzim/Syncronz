@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase/client.js';
-import { loginWithGoogle, logoutUser } from '../lib/firebase/auth.js';
+import { loginWithGoogle, logoutUser, loginWithEmail, registerWithEmail } from '../lib/firebase/auth.js';
 import { createUserProfile } from '../lib/firebase/firestore.js';
 
 const AuthContext = createContext(undefined);
@@ -103,8 +103,8 @@ export const AuthProvider = ({ children }) => {
 
         setProfile({
           uid: firebaseUser.uid,
-          displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-          photoURL: firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(firebaseUser.uid)}`,
+          displayName: dbProfile?.displayName || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+          photoURL: dbProfile?.photoURL || firebaseUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(firebaseUser.uid)}`,
           lastActive: new Date().toISOString(),
           isAdmin: isSuperAdmin || !!dbProfile?.isAdmin
         });
@@ -129,6 +129,26 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const handleSignInWithEmail = async (email, password) => {
+    setLoading(true);
+    try {
+      await loginWithEmail(email, password);
+    } catch (err) {
+      setLoading(false);
+      throw err;
+    }
+  };
+
+  const handleSignUpWithEmail = async (email, password, displayName) => {
+    setLoading(true);
+    try {
+      await registerWithEmail(email, password, displayName);
+    } catch (err) {
+      setLoading(false);
+      throw err;
+    }
+  };
+
   const handleSignOut = async () => {
     setLoading(true);
     try {
@@ -138,8 +158,46 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const refreshProfile = async () => {
+    if (!auth.currentUser) return;
+    try {
+      await auth.currentUser.reload();
+      const updatedUser = auth.currentUser;
+      
+      const userDoc = await getDoc(doc(db, 'users', updatedUser.uid));
+      const dbProfile = userDoc.exists() ? userDoc.data() : null;
+
+      const emailLower = updatedUser.email?.toLowerCase();
+      const resolvedAdmin = adminEmail || process.env.NEXT_PUBLIC_ADMIN_EMAIL || null;
+      const isSuperAdmin = emailLower && resolvedAdmin && emailLower === resolvedAdmin.toLowerCase();
+
+      setUser({ ...updatedUser });
+      setProfile({
+        uid: updatedUser.uid,
+        displayName: dbProfile?.displayName || updatedUser.displayName || updatedUser.email?.split('@')[0] || 'User',
+        photoURL: dbProfile?.photoURL || updatedUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(updatedUser.uid)}`,
+        lastActive: new Date().toISOString(),
+        isAdmin: isSuperAdmin || !!dbProfile?.isAdmin
+      });
+    } catch (err) {
+      console.error('Failed to refresh profile:', err);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, profile, isAllowed, loading, adminEmail, initError, signIn: handleSignIn, signOut: handleSignOut }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      profile, 
+      isAllowed, 
+      loading, 
+      adminEmail, 
+      initError, 
+      signIn: handleSignIn, 
+      signInWithEmail: handleSignInWithEmail,
+      signUpWithEmail: handleSignUpWithEmail,
+      signOut: handleSignOut,
+      refreshProfile
+    }}>
       {children}
     </AuthContext.Provider>
   );
