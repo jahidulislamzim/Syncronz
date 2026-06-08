@@ -195,13 +195,13 @@ export const Header = ({ currentBoardName: propBoardName, onOpenBoardSelector: p
         {/* Sidebar toggle — mobile */}
         <button
           onClick={onToggleSidebar}
-          className="lg:hidden p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition cursor-pointer -ml-1"
+          className="min-[1400px]:hidden p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition cursor-pointer -ml-1"
         >
           <Menu className="w-5 h-5" />
         </button>
 
         {/* Mobile brand */}
-        <div className="flex items-center gap-2 lg:hidden">
+        <div className="flex items-center gap-2 min-[1400px]:hidden">
           <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center">
             <Sparkles className="w-4 h-4 text-indigo-400" />
           </div>
@@ -209,7 +209,7 @@ export const Header = ({ currentBoardName: propBoardName, onOpenBoardSelector: p
         </div>
 
         {/* Desktop board title */}
-        <div className="hidden lg:flex items-center gap-3">
+        <div className="hidden min-[1400px]:flex items-center gap-3">
           <h1 className="text-lg font-bold text-slate-900">
             {currentBoardName || 'No Board Selected'}
           </h1>
@@ -332,7 +332,7 @@ export const Header = ({ currentBoardName: propBoardName, onOpenBoardSelector: p
               referrerPolicy="no-referrer"
               className="w-7 h-7 rounded-xl object-cover border border-slate-200/50"
             />
-            <div className="hidden lg:block min-w-0 pr-1.5">
+            <div className="hidden min-[1400px]:block min-w-0 pr-1.5">
               <p className="text-xs font-bold text-slate-800 truncate max-w-[100px]">{profile.displayName}</p>
             </div>
             <button

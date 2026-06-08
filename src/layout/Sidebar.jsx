@@ -45,12 +45,12 @@ export const Sidebar = ({ isOpen, onClose }) => {
           <span className="text-white font-extrabold text-xl tracking-tight" style={{ fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif" }}>Syncronz</span>
           <p className="text-[9px] text-slate-500 font-mono tracking-wider">by Jahidul Islam Zim</p>
         </div>
-        <button onClick={onClose} className="lg:hidden p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer">
+        <button onClick={onClose} className="min-[1400px]:hidden p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer">
           <X className="w-5 h-5" />
         </button>
       </div>
       <nav className="flex-1 px-4 space-y-1">
-        <div className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-2 px-2 font-mono">Navigation</div>
+        <div className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-2 px-2 font-mono">Admin</div>
         {profile?.isAdmin && (
           <Link
             href="/"
@@ -58,7 +58,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
             className={`w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl text-sm transition cursor-pointer ${isActive('/') && pathname === '/' ? 'bg-slate-800 text-white font-semibold' : 'text-slate-100 hover:bg-slate-800/60 hover:text-white font-medium'}`}
           >
             <Landmark className="w-4 h-4 text-blue-400" />
-            <span>Dashboard Home</span>
+            <span>Dashboard</span>
           </Link>
         )}
         {profile?.isAdmin && (
@@ -68,7 +68,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
             className={`w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl text-sm transition cursor-pointer ${isActive('/manage-users') ? 'bg-slate-800 text-white font-semibold' : 'text-slate-100 hover:bg-slate-800/60 hover:text-white font-medium'}`}
           >
             <ShieldCheck className="w-4 h-4 text-indigo-400" />
-            <span>Manage Users</span>
+            <span>Users</span>
           </Link>
         )}
         {profile?.isAdmin && (
@@ -78,11 +78,11 @@ export const Sidebar = ({ isOpen, onClose }) => {
             className={`w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl text-sm transition cursor-pointer ${isActive('/settings') ? 'bg-slate-800 text-white font-semibold' : 'text-slate-100 hover:bg-slate-800/60 hover:text-white font-medium'}`}
           >
             <Settings className="w-4 h-4 text-slate-400" />
-            <span>Email Settings</span>
+            <span>Settings</span>
           </Link>
         )}
 
-        <div className="mt-8 text-xs font-bold text-slate-200 uppercase tracking-wider mb-2 px-2 font-mono">Boards</div>
+        <div className="mt-8 text-xs font-bold text-slate-200 uppercase tracking-wider mb-2 px-2 font-mono">Workspaces</div>
 
         <Link
           href="/boards/new"
@@ -90,7 +90,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
           className={`w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl text-sm transition cursor-pointer ${isActive('/boards/new') ? 'bg-slate-800 text-white font-semibold' : 'text-slate-100 hover:bg-slate-800/60 hover:text-white font-medium'}`}
         >
           <Plus className="w-4 h-4 text-indigo-400" />
-          <span>Board Management</span>
+          <span>Manage Boards</span>
         </Link>
 
         <Link
@@ -99,13 +99,13 @@ export const Sidebar = ({ isOpen, onClose }) => {
           className={`w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl text-sm transition cursor-pointer ${isActive('/focus') ? 'bg-slate-800 text-white font-semibold' : 'text-slate-100 hover:bg-slate-800/60 hover:text-white font-medium'}`}
         >
           <Timer className="w-4 h-4 text-emerald-400" />
-          <span>Focus Timer</span>
+          <span>Focus</span>
         </Link>
 
         <div className="mt-3 mb-1 border-t border-slate-800/60" />
 
         {userBoards.length === 0 ? (
-          <p className="text-xs text-slate-300 px-2 italic">No active environments.</p>
+          <p className="text-xs text-slate-300 px-2 italic">No active workspaces.</p>
         ) : (
           <div className="space-y-1.5">
             {userBoards.map((b, idx) => {
@@ -150,7 +150,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex w-64 bg-[#0F172A] text-slate-200 flex-col shrink-0 border-r border-[#1E293B] justify-between h-full">
+      <aside className="hidden min-[1400px]:flex w-64 bg-[#0F172A] text-slate-200 flex-col shrink-0 border-r border-[#1E293B] justify-between h-full">
         {content}
         {profileBlock}
       </aside>
@@ -164,7 +164,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+              className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm min-[1400px]:hidden"
               onClick={onClose}
             />
             <motion.aside
@@ -172,7 +172,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="fixed inset-y-0 left-0 z-50 w-72 bg-[#0F172A] text-slate-200 flex flex-col border-r border-[#1E293B] shadow-2xl lg:hidden"
+              className="fixed inset-y-0 left-0 z-50 w-72 bg-[#0F172A] text-slate-200 flex flex-col border-r border-[#1E293B] shadow-2xl min-[1400px]:hidden"
             >
               {content}
               {profileBlock}
