@@ -23,6 +23,16 @@ import { MultiSelectDropdown } from './MultiSelectDropdown.jsx';
 import { TaskProgressReportModal } from './TaskProgressReportModal.jsx';
 import { TaskCommentsModal } from './TaskCommentsModal.jsx';
 
+const isDeadlineOver = (dueDate, status) => {
+  if (!dueDate || status === TaskStatus.DONE) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const [year, month, day] = dueDate.split('-').map(Number);
+  const due = new Date(year, month - 1, day);
+  due.setHours(0, 0, 0, 0);
+  return due < today;
+};
+
 export const KanbanBoard = ({ boardId }) => {
   const { user, profile } = useAuth();
   const [tasks, setTasks] = useState([]);
@@ -262,6 +272,12 @@ export const KanbanBoard = ({ boardId }) => {
     e.preventDefault();
     if (!user || !inspectingTask || !editTitle.trim()) return;
 
+    // Block saving updates if task's deadline is over (only creator can do)
+    if (isDeadlineOver(inspectingTask.dueDate, inspectingTask.status) && user.uid !== inspectingTask.creatorId) {
+      showToast('The deadline for this task has passed. Only the task creator can update its details.', 'error');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const assigneeObjs = members.filter(m => editAssigneeIds.includes(m.uid));
@@ -407,6 +423,19 @@ export const KanbanBoard = ({ boardId }) => {
 
   const handleStatusTransition = async (task, targetStatus) => {
     if (!user) return;
+
+    // Only the task creator can transition status
+    if (user.uid !== task.creatorId) {
+      showToast('Only the task creator can transition the status of this task.', 'error');
+      return;
+    }
+
+    // Block transition if task's deadline is over (only creator can do, but since only creator can transition anyway, this is a reinforcing check)
+    if (isDeadlineOver(task.dueDate, task.status)) {
+      showToast('The deadline for this task has passed. Only the task creator can update its status.', 'error');
+      return;
+    }
+
     try {
       const actor = {
         uid: user.uid,
@@ -582,6 +611,19 @@ export const KanbanBoard = ({ boardId }) => {
   // 3b. Toggle subtask completion in view mode (restricted by assignee permissions)
   const handleToggleSubtaskViewMode = async (task, subtaskId) => {
     if (!user) return;
+
+    // Checklist items only active when task is In Progress
+    if (task.status !== TaskStatus.IN_PROGRESS) {
+      showToast('Checklist items can only be updated when the task is In Progress.', 'error');
+      return;
+    }
+
+    // Block checklist toggling if task's deadline is over (only creator can do)
+    if (isDeadlineOver(task.dueDate, task.status) && user.uid !== task.creatorId) {
+      showToast('The deadline for this task has passed. Only the task creator can update checklist items.', 'error');
+      return;
+    }
+
     const sub = task.subtasks?.find(s => s.id === subtaskId);
     if (!sub) return;
 
@@ -633,6 +675,10 @@ export const KanbanBoard = ({ boardId }) => {
   // 4. Toggle Tag
   const handleToggleTag = async (task, tag) => {
     if (!user) return;
+    if (task.status !== TaskStatus.IN_PROGRESS) {
+      showToast('Tags can only be modified when the task is In Progress.', 'error');
+      return;
+    }
     setIsSubmitting(true);
     try {
       const tags = task.tags ? [...task.tags] : [];
@@ -654,6 +700,10 @@ export const KanbanBoard = ({ boardId }) => {
   // 5. Add Custom Link Attachment
   const handleAddLinkAttachment = async (task, name, url) => {
     if (!user || !url.trim()) return;
+    if (task.status !== TaskStatus.IN_PROGRESS) {
+      showToast('Links can only be attached when the task is In Progress.', 'error');
+      return;
+    }
     setIsSubmitting(true);
     try {
       const attachments = task.attachments ? [...task.attachments] : [];
@@ -692,6 +742,10 @@ export const KanbanBoard = ({ boardId }) => {
   // 6. Delete attachment
   const handleDeleteAttachment = async (task, attachmentId) => {
     if (!user) return;
+    if (task.status !== TaskStatus.IN_PROGRESS) {
+      showToast('Attachments can only be removed when the task is In Progress.', 'error');
+      return;
+    }
 
     const attachment = task.attachments?.find(a => a.id === attachmentId);
     if (!attachment) return;
@@ -834,6 +888,10 @@ export const KanbanBoard = ({ boardId }) => {
   const handleFileUpload = async (e, task) => {
     const file = e.target.files?.[0];
     if (!file || !task) return;
+    if (task.status !== TaskStatus.IN_PROGRESS) {
+      showToast('Files can only be uploaded when the task is In Progress.', 'error');
+      return;
+    }
     e.target.value = '';
     setUploadingFile(true);
     try {
@@ -922,7 +980,7 @@ export const KanbanBoard = ({ boardId }) => {
     todo: tasks.filter(t => t.status === TaskStatus.TODO).length,
     doing: tasks.filter(t => t.status === TaskStatus.IN_PROGRESS).length,
     completed: tasks.filter(t => t.status === TaskStatus.DONE).length,
-    high: tasks.filter(t => t.priority === TaskPriority.HIGH).length,
+    high: tasks.filter(t => t.priority === TaskPriority.HIGH && t.status !== TaskStatus.DONE).length,
   };
 
   return (
@@ -1113,7 +1171,7 @@ export const KanbanBoard = ({ boardId }) => {
                           
                           {/* Speed transit selector */}
                           <div className="opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1">
-                            {col.id !== TaskStatus.DONE && (
+                            {col.id !== TaskStatus.DONE && user?.uid === task.creatorId && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1202,8 +1260,20 @@ export const KanbanBoard = ({ boardId }) => {
                           {/* Date limit */}
                           <div className="flex items-center space-x-2.5 text-slate-400">
                             <div className="flex items-center space-x-1.5">
-                              <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                              <span className="font-mono tracking-wider font-semibold">{task.dueDate || 'No Limit'}</span>
+                              {isDeadlineOver(task.dueDate, task.status) ? (
+                                <>
+                                  <Calendar className="h-3.5 w-3.5 text-rose-500" />
+                                  <span className="font-mono tracking-wider font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                                    Deadline Over ({task.dueDate})
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                                  <span className="font-mono tracking-wider font-semibold">{task.dueDate || 'No Limit'}</span>
+                                </>
+                              )}
                             </div>
                             {(task.comments || []).length > 0 && (
                               <div className="flex items-center space-x-0.5 text-slate-400 bg-slate-50 border border-slate-200/50 px-1.5 py-0.5 rounded-md font-mono font-bold text-[9px]">
@@ -2457,21 +2527,39 @@ export const KanbanBoard = ({ boardId }) => {
 
                       {/* Controls to transit task status */}
                       <div className="pt-4.5 mt-5 border-t border-slate-100">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2.5">
-                          Move Board State
-                        </label>
+                        <div className="flex items-center justify-between mb-2.5">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
+                            Move Board State
+                          </label>
+                          {user?.uid !== liveInspectingTask.creatorId && (
+                            <span className="text-[9px] font-bold text-rose-500 font-mono uppercase bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
+                              Creator Only
+                            </span>
+                          )}
+                        </div>
                         <div className="flex flex-wrap gap-1.5">
-                          {columnsDef.map(col => (
-                            <button
-                              key={col.id}
-                              type="button"
-                              onClick={() => handleStatusTransition(liveInspectingTask, col.id)}
-                              className={`py-1.5 px-3 rounded-lg border text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer shadow-sm ${liveInspectingTask.status === col.id ? 'bg-blue-600 border-blue-600 text-white shadow-blue-600/10' : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'}`}
-                            >
-                              {liveInspectingTask.status === col.id && <Check className="h-3 w-3 stroke-[3px]" />}
-                              <span>{col.label}</span>
-                            </button>
-                          ))}
+                          {columnsDef.map(col => {
+                            const isSelected = liveInspectingTask.status === col.id;
+                            const isCreator = user?.uid === liveInspectingTask.creatorId;
+                            return (
+                              <button
+                                key={col.id}
+                                type="button"
+                                disabled={!isCreator && !isSelected}
+                                onClick={() => handleStatusTransition(liveInspectingTask, col.id)}
+                                className={`py-1.5 px-3 rounded-lg border text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer shadow-sm ${
+                                  isSelected 
+                                    ? 'bg-blue-600 border-blue-600 text-white shadow-blue-600/10' 
+                                    : !isCreator 
+                                      ? 'bg-slate-50 border-slate-100 text-slate-400 cursor-not-allowed opacity-60' 
+                                      : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
+                                }`}
+                              >
+                                {isSelected && <Check className="h-3 w-3 stroke-[3px]" />}
+                                <span>{col.label}</span>
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
 
@@ -2519,11 +2607,36 @@ export const KanbanBoard = ({ boardId }) => {
                         <div>
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1.5">Completion Date</span>
                           <div className="flex items-center space-x-2 font-sans bg-slate-50 border border-slate-200/50 rounded-xl p-2.5 font-mono">
-                            <Calendar className="h-6 w-6 text-slate-450 shrink-0" />
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold text-slate-800">{liveInspectingTask.dueDate || 'Un-restricted'}</p>
-                              <p className="text-[10px] text-slate-400">Limit Target</p>
-                            </div>
+                            {liveInspectingTask.status === TaskStatus.DONE ? (
+                              <>
+                                <Calendar className="h-6 w-6 text-emerald-500 shrink-0" />
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-150 px-2 py-0.5 rounded-md">
+                                    Completed
+                                  </p>
+                                  <p className="text-[10px] text-slate-400">Task Closed</p>
+                                </div>
+                              </>
+                            ) : isDeadlineOver(liveInspectingTask.dueDate, liveInspectingTask.status) ? (
+                              <>
+                                <Calendar className="h-6 w-6 text-rose-500 shrink-0" />
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-150 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                                    Deadline Over ({liveInspectingTask.dueDate})
+                                  </p>
+                                  <p className="text-[10px] text-rose-400 font-semibold">Overdue Task</p>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <Calendar className="h-6 w-6 text-slate-450 shrink-0" />
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-slate-800">{liveInspectingTask.dueDate || 'Un-restricted'}</p>
+                                  <p className="text-[10px] text-slate-400">Limit Target</p>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
