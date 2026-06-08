@@ -33,9 +33,11 @@ export const Sidebar = ({ isOpen, onClose }) => {
   }, [user]);
 
   const userBoards = allBoards.filter(b =>
-    profile?.isAdmin ||
-    b.creatorId === user?.uid ||
-    profile?.joinedBoards?.includes(b.boardId)
+    !b.isArchived && (
+      profile?.isAdmin ||
+      b.creatorId === user?.uid ||
+      profile?.joinedBoards?.includes(b.boardId)
+    )
   );
 
   const content = (

@@ -312,6 +312,61 @@ export async function leaveBoard(boardId, userId, userName, userPhoto) {
   }
 }
 
+export async function archiveBoard(boardId, userId, userName, userPhoto) {
+  const path = `boards/${boardId}`;
+  try {
+    const boardRef = doc(db, 'boards', boardId);
+    await updateDoc(boardRef, {
+      isArchived: true,
+      updatedAt: serverTimestamp()
+    });
+
+    await addActivityLog(
+      boardId,
+      ActivityType.BOARD_JOINED,
+      userId,
+      userName,
+      userPhoto,
+      `archived the board`
+    );
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export async function restoreBoard(boardId, userId, userName, userPhoto) {
+  const path = `boards/${boardId}`;
+  try {
+    const boardRef = doc(db, 'boards', boardId);
+    await updateDoc(boardRef, {
+      isArchived: false,
+      updatedAt: serverTimestamp()
+    });
+
+    await addActivityLog(
+      boardId,
+      ActivityType.BOARD_JOINED,
+      userId,
+      userName,
+      userPhoto,
+      `restored the board`
+    );
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export async function deleteBoardPermanently(boardId) {
+  const path = `boards/${boardId}`;
+  try {
+    const boardRef = doc(db, 'boards', boardId);
+    await deleteDoc(boardRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+
 // ─── Tasks ───────────────────────────────────────────────────────
 export async function createTask(boardId, title, description, priority, dueDate, assignee, creator) {
   const taskId = 'task_' + generateId();

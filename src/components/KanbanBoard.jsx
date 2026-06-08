@@ -33,7 +33,7 @@ const isDeadlineOver = (dueDate, status) => {
   return due < today;
 };
 
-export const KanbanBoard = ({ boardId }) => {
+export const KanbanBoard = ({ boardId, isArchived = false }) => {
   const { user, profile } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [members, setMembers] = useState([]);
@@ -174,6 +174,10 @@ export const KanbanBoard = ({ boardId }) => {
 
   const handleCreateTask = async (e) => {
     e.preventDefault();
+    if (isArchived) {
+      showToast('This board is archived and cannot be modified.', 'error');
+      return;
+    }
     if (!user || !newTitle.trim()) return;
 
     setIsSubmitting(true);
@@ -270,6 +274,10 @@ export const KanbanBoard = ({ boardId }) => {
 
   const handleUpdateTaskDetails = async (e) => {
     e.preventDefault();
+    if (isArchived) {
+      showToast('This board is archived and cannot be modified.', 'error');
+      return;
+    }
     if (!user || !inspectingTask || !editTitle.trim()) return;
 
     // Block saving updates if task's deadline is over (only creator can do)
@@ -393,6 +401,10 @@ export const KanbanBoard = ({ boardId }) => {
   };
 
   const handleDeleteTask = async (task) => {
+    if (isArchived) {
+      showToast('This board is archived and cannot be modified.', 'error');
+      return;
+    }
     if (!user) return;
     if (!deleteConfirm) {
       setDeleteConfirm(true);
@@ -422,6 +434,10 @@ export const KanbanBoard = ({ boardId }) => {
   };
 
   const handleStatusTransition = async (task, targetStatus) => {
+    if (isArchived) {
+      showToast('This board is archived and cannot be modified.', 'error');
+      return;
+    }
     if (!user) return;
 
     // Only the task creator can transition status
@@ -610,6 +626,10 @@ export const KanbanBoard = ({ boardId }) => {
 
   // 3b. Toggle subtask completion in view mode (restricted by assignee permissions)
   const handleToggleSubtaskViewMode = async (task, subtaskId) => {
+    if (isArchived) {
+      showToast('This board is archived and cannot be modified.', 'error');
+      return;
+    }
     if (!user) return;
 
     // Checklist items only active when task is In Progress
@@ -674,6 +694,10 @@ export const KanbanBoard = ({ boardId }) => {
 
   // 4. Toggle Tag
   const handleToggleTag = async (task, tag) => {
+    if (isArchived) {
+      showToast('This board is archived and cannot be modified.', 'error');
+      return;
+    }
     if (!user) return;
     if (task.status !== TaskStatus.IN_PROGRESS) {
       showToast('Tags can only be modified when the task is In Progress.', 'error');
@@ -699,6 +723,10 @@ export const KanbanBoard = ({ boardId }) => {
 
   // 5. Add Custom Link Attachment
   const handleAddLinkAttachment = async (task, name, url) => {
+    if (isArchived) {
+      showToast('This board is archived and cannot be modified.', 'error');
+      return;
+    }
     if (!user || !url.trim()) return;
     if (task.status !== TaskStatus.IN_PROGRESS) {
       showToast('Links can only be attached when the task is In Progress.', 'error');
@@ -741,6 +769,10 @@ export const KanbanBoard = ({ boardId }) => {
 
   // 6. Delete attachment
   const handleDeleteAttachment = async (task, attachmentId) => {
+    if (isArchived) {
+      showToast('This board is archived and cannot be modified.', 'error');
+      return;
+    }
     if (!user) return;
     if (task.status !== TaskStatus.IN_PROGRESS) {
       showToast('Attachments can only be removed when the task is In Progress.', 'error');
@@ -886,6 +918,10 @@ export const KanbanBoard = ({ boardId }) => {
 
   // 7. Upload file to Google Drive
   const handleFileUpload = async (e, task) => {
+    if (isArchived) {
+      showToast('This board is archived and cannot be modified.', 'error');
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file || !task) return;
     if (task.status !== TaskStatus.IN_PROGRESS) {
@@ -1102,13 +1138,15 @@ export const KanbanBoard = ({ boardId }) => {
           )}
         </div>
 
-        <button
-          onClick={() => setIsCreateOpen(true)}
-          className="px-4 py-2.5 bg-blue-600 lg:hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-md shadow-blue-600/15 cursor-pointer shrink-0"
-        >
-          <Plus className="h-4 w-4" />
-          <span>New Task</span>
-        </button>
+        {!isArchived && (
+          <button
+            onClick={() => setIsCreateOpen(true)}
+            className="px-4 py-2.5 bg-blue-600 lg:hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-md shadow-blue-600/15 cursor-pointer shrink-0"
+          >
+            <Plus className="h-4 w-4" />
+            <span>New Task</span>
+          </button>
+        )}
       </div>
 
       {/* Kanban Grid */}
@@ -1126,16 +1164,18 @@ export const KanbanBoard = ({ boardId }) => {
                 <span className={`text-[10px] font-bold px-2.5 py-1 rounded-xl border ${col.color} font-mono uppercase tracking-wider`}>
                   {col.label} &bull; {colTasks.length}
                 </span>
-                <button
-                  onClick={() => {
-                    setNewTitle('');
-                    setNewDesc('');
-                    setIsCreateOpen(true);
-                  }}
-                  className="p-1 hover:bg-slate-200 text-slate-500 hover:text-slate-900 rounded-lg transition-all cursor-pointer"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
+                {!isArchived && (
+                  <button
+                    onClick={() => {
+                      setNewTitle('');
+                      setNewDesc('');
+                      setIsCreateOpen(true);
+                    }}
+                    className="p-1 hover:bg-slate-200 text-slate-500 hover:text-slate-900 rounded-lg transition-all cursor-pointer"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                )}
               </div>
 
               {/* Tasks body items */}
@@ -1171,7 +1211,7 @@ export const KanbanBoard = ({ boardId }) => {
                           
                           {/* Speed transit selector */}
                           <div className="opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1">
-                            {col.id !== TaskStatus.DONE && user?.uid === task.creatorId && (
+                            {col.id !== TaskStatus.DONE && user?.uid === task.creatorId && !isArchived && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1706,46 +1746,50 @@ export const KanbanBoard = ({ boardId }) => {
                     ID: {inspectingTask.taskId.split('_')[1]}
                   </span>
                   <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => {
-                        setIsEditing(!isEditing);
-                        if (!isEditing) {
-                          setEditTitle(inspectingTask.title);
-                          setEditDesc(inspectingTask.description || '');
-                          setEditPriority(inspectingTask.priority);
-                          setEditDueDate(inspectingTask.dueDate || '');
-                          setEditAssigneeId(inspectingTask.assigneeId || '');
-                          setEditSubtasks(inspectingTask.subtasks ? [...inspectingTask.subtasks] : []);
-                        }
-                      }}
-                      className="p-1.5 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-200 transition cursor-pointer"
-                      title="Edit task text"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </button>
-                    {deleteConfirm ? (
-                      <div className="flex items-center space-x-1">
+                    {!isArchived && (
+                      <button
+                        onClick={() => {
+                          setIsEditing(!isEditing);
+                          if (!isEditing) {
+                            setEditTitle(inspectingTask.title);
+                            setEditDesc(inspectingTask.description || '');
+                            setEditPriority(inspectingTask.priority);
+                            setEditDueDate(inspectingTask.dueDate || '');
+                            setEditAssigneeId(inspectingTask.assigneeId || '');
+                            setEditSubtasks(inspectingTask.subtasks ? [...inspectingTask.subtasks] : []);
+                          }
+                        }}
+                        className="p-1.5 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-200 transition cursor-pointer"
+                        title="Edit task text"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                    )}
+                    {!isArchived && (
+                      deleteConfirm ? (
+                        <div className="flex items-center space-x-1">
+                          <button
+                            onClick={() => handleDeleteTask(inspectingTask)}
+                            className="px-2 py-1 text-[11px] font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg transition cursor-pointer"
+                          >
+                            Delete
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirm(false)}
+                            className="px-2 py-1 text-[11px] font-bold text-slate-650 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
                         <button
                           onClick={() => handleDeleteTask(inspectingTask)}
-                          className="px-2 py-1 text-[11px] font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg transition cursor-pointer"
+                          className="p-1.5 text-slate-400 hover:text-red-700 rounded-lg hover:bg-red-50 transition cursor-pointer"
+                          title="Delete task"
                         >
-                          Delete
+                          <Trash2 className="h-4 w-4" />
                         </button>
-                        <button
-                          onClick={() => setDeleteConfirm(false)}
-                          className="px-2 py-1 text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => handleDeleteTask(inspectingTask)}
-                        className="p-1.5 text-slate-400 hover:text-red-700 rounded-lg hover:bg-red-50 transition cursor-pointer"
-                        title="Delete task"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      )
                     )}
                     <button 
                       onClick={() => setInspectingTask(null)}
@@ -2531,11 +2575,15 @@ export const KanbanBoard = ({ boardId }) => {
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
                             Move Board State
                           </label>
-                          {user?.uid !== liveInspectingTask.creatorId && (
+                          {isArchived ? (
+                            <span className="text-[9px] font-bold text-amber-600 font-mono uppercase bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">
+                              Board Archived
+                            </span>
+                          ) : user?.uid !== liveInspectingTask.creatorId ? (
                             <span className="text-[9px] font-bold text-rose-500 font-mono uppercase bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
                               Creator Only
                             </span>
-                          )}
+                          ) : null}
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {columnsDef.map(col => {
@@ -2545,12 +2593,12 @@ export const KanbanBoard = ({ boardId }) => {
                               <button
                                 key={col.id}
                                 type="button"
-                                disabled={!isCreator && !isSelected}
+                                disabled={isArchived || (!isCreator && !isSelected)}
                                 onClick={() => handleStatusTransition(liveInspectingTask, col.id)}
                                 className={`py-1.5 px-3 rounded-lg border text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer shadow-sm ${
                                   isSelected 
                                     ? 'bg-blue-600 border-blue-600 text-white shadow-blue-600/10' 
-                                    : !isCreator 
+                                    : isArchived || !isCreator 
                                       ? 'bg-slate-50 border-slate-100 text-slate-400 cursor-not-allowed opacity-60' 
                                       : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
                                 }`}
@@ -2692,6 +2740,7 @@ export const KanbanBoard = ({ boardId }) => {
           profile={profile}
           updateTaskDetails={updateTaskDetails}
           addActivityLog={addActivityLog}
+          isArchived={isArchived}
         />
       )}
     </div>

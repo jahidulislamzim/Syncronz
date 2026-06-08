@@ -29,7 +29,7 @@ export default function DashboardHome() {
       const list = [];
       snapshot.forEach(docSnap => {
         const data = docSnap.data();
-        if (data.boardId) list.push(data);
+        if (data.boardId && !data.isArchived) list.push(data);
       });
       setAllBoards(list);
     });

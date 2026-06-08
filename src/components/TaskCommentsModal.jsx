@@ -12,7 +12,8 @@ export const TaskCommentsModal = ({
   user, 
   profile, 
   updateTaskDetails, 
-  addActivityLog 
+  addActivityLog,
+  isArchived = false
 }) => {
   const [commentText, setCommentText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -35,7 +36,7 @@ export const TaskCommentsModal = ({
 
   const handleSendComment = async (e) => {
     e.preventDefault();
-    if (!commentText.trim() || !user) return;
+    if (isArchived || !commentText.trim() || !user) return;
 
     setIsSubmitting(true);
     try {
@@ -151,7 +152,11 @@ export const TaskCommentsModal = ({
 
         {/* Input Form */}
         <div className="p-4 border-t border-slate-100 bg-white">
-          {task.status !== 'in_progress' ? (
+          {isArchived ? (
+            <div className="text-center text-xs text-amber-600 font-semibold py-2.5 bg-amber-50 rounded-2xl border border-amber-100 font-mono">
+              Comments are disabled because this board is archived.
+            </div>
+          ) : task.status !== 'in_progress' ? (
             <div className="text-center text-xs text-rose-500 font-semibold py-2.5 bg-rose-50 rounded-2xl border border-rose-100 font-mono">
               Comments can only be added when the task is In Progress.
             </div>
