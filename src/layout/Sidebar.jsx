@@ -6,13 +6,79 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '../context/AuthContext.jsx';
 import { db } from '../lib/firebase/client.js';
 import { collection, query, onSnapshot } from 'firebase/firestore';
-import { Landmark, ShieldCheck, Plus, Timer, Settings, X, ChevronRight } from 'lucide-react';
+import { Landmark, ShieldCheck, Plus, Timer, Settings, X, ChevronRight, Download } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 export const Sidebar = ({ isOpen, onClose }) => {
   const { user, profile } = useAuth();
   const pathname = usePathname();
   const [allBoards, setAllBoards] = useState([]);
+
+  // PWA Installer logic in Sidebar
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const checkInstalled = () => {
+        const installed = localStorage.getItem('pwa-installed') === 'true' ||
+                          window.matchMedia('(display-mode: standalone)').matches ||
+                          window.navigator.standalone === true;
+        setIsInstalled(installed);
+      };
+
+      checkInstalled();
+
+      // Check if already captured globally
+      if (window.deferredPrompt) {
+        setDeferredPrompt(window.deferredPrompt);
+        setIsInstallable(true);
+      }
+
+      const handlePromptReady = () => {
+        if (window.deferredPrompt) {
+          setDeferredPrompt(window.deferredPrompt);
+          setIsInstallable(true);
+        }
+      };
+      window.addEventListener('pwa-prompt-ready', handlePromptReady);
+
+      const handleInstalledSuccess = () => {
+        setIsInstalled(true);
+      };
+      window.addEventListener('pwa-installed-success', handleInstalledSuccess);
+
+      const handler = (e) => {
+        e.preventDefault();
+        setDeferredPrompt(e);
+        setIsInstallable(true);
+        window.deferredPrompt = e;
+      };
+      window.addEventListener('beforeinstallprompt', handler);
+
+      return () => {
+        window.removeEventListener('beforeinstallprompt', handler);
+        window.removeEventListener('pwa-prompt-ready', handlePromptReady);
+        window.removeEventListener('pwa-installed-success', handleInstalledSuccess);
+      };
+    }
+  }, []);
+
+  const triggerInstall = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setIsInstallable(false);
+        setDeferredPrompt(null);
+        localStorage.setItem('pwa-installed', 'true');
+        setIsInstalled(true);
+      }
+    } else {
+      alert("To install Syncro Desktop & Mobile App:\n\n• On Desktop: Look for the Install icon in the browser URL bar (far right), or open the browser menu and select 'Install Syncro'.\n• On Mobile (Android/iOS): Tap the browser Share icon or Menu button, then select 'Add to Home screen'.");
+    }
+  };
 
   const isActive = (path) => {
     if (path === '/') return pathname === '/';
@@ -132,6 +198,15 @@ export const Sidebar = ({ isOpen, onClose }) => {
 
   const profileBlock = (
     <div className="p-4 border-t border-slate-800/80 bg-slate-950/20 space-y-3">
+      {!isInstalled && (
+        <button
+          onClick={triggerInstall}
+          className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 bg-slate-800/30 hover:bg-indigo-900/30 text-slate-400 hover:text-white rounded-lg border border-slate-850 transition cursor-pointer text-[10px] font-semibold"
+        >
+          <Download className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+          <span>Download App</span>
+        </button>
+      )}
       <Link 
         href="/profile"
         onClick={onClose}

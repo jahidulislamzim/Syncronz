@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../../src/context/AuthContext.jsx';
-import { updateUserProfile } from '../../../src/lib/firebase/firestore.js';
+import { updateUserProfile, addPushSubscription, removePushSubscription } from '../../../src/lib/firebase/firestore.js';
 import { auth } from '../../../src/lib/firebase/client.js';
 import { updateProfile, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { 
@@ -19,7 +19,11 @@ import {
   KeyRound, 
   Globe, 
   Copy,
-  Check
+  Check,
+  Bell,
+  BellOff,
+  Download,
+  Smartphone
 } from 'lucide-react';
 
 export default function UserProfilePage() {
@@ -41,6 +45,101 @@ export default function UserProfilePage() {
   const [savingGeneral, setSavingGeneral] = useState(false);
   const [savingSecurity, setSavingSecurity] = useState(false);
   const [toastMsg, setToastMsg] = useState(null);
+
+  // PWA & Web Push states
+  const [notificationPermission, setNotificationPermission] = useState('default');
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [isPushLoading, setIsPushLoading] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+
+  // Listen for beforeinstallprompt
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  // Check notification permission and subscription status
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setNotificationPermission(Notification.permission);
+      
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then((reg) => {
+          reg.pushManager.getSubscription().then((sub) => {
+            setIsSubscribed(!!sub);
+          });
+        });
+      }
+    }
+  }, []);
+
+  const toggleNotifications = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      showToast('Notifications are not supported by this browser.', 'error');
+      return;
+    }
+
+    setIsPushLoading(true);
+    try {
+      if (isSubscribed) {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await sub.unsubscribe();
+          await removePushSubscription(profile.uid, sub.endpoint);
+        }
+        setIsSubscribed(false);
+        setNotificationPermission(Notification.permission);
+        showToast('Successfully unsubscribed from notifications.', 'success');
+      } else {
+        const permission = await Notification.requestPermission();
+        setNotificationPermission(permission);
+        
+        if (permission !== 'granted') {
+          showToast('Notification permission denied. Reset site permissions in settings.', 'error');
+          setIsPushLoading(false);
+          return;
+        }
+
+        const reg = await navigator.serviceWorker.ready;
+        const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+        if (!publicKey) {
+          throw new Error('VAPID public key not configured on client.');
+        }
+
+        const subscription = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey)
+        });
+
+        await addPushSubscription(profile.uid, subscription);
+        setIsSubscribed(true);
+        showToast('Successfully subscribed to native notifications!', 'success');
+      }
+    } catch (err) {
+      console.error('Subscription error:', err);
+      showToast(err instanceof Error ? err.message : 'Failed to update push subscription.', 'error');
+    } finally {
+      setIsPushLoading(false);
+    }
+  };
+
+  const triggerInstall = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setIsInstallable(false);
+      setDeferredPrompt(null);
+      showToast('PWA App Installed successfully!', 'success');
+    }
+  };
 
   // Sync state with profile data
   useEffect(() => {
@@ -498,8 +597,119 @@ export default function UserProfilePage() {
             </div>
           </div>
 
+          {/* PWA & Native Notifications Hub */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-5 shadow-sm">
+            <div className="flex items-center gap-2.5 border-b border-slate-100 pb-4">
+              <div className="p-2 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-600">
+                <Smartphone className="h-4.5 w-4.5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">PWA & Notification Hub</h3>
+                <p className="text-[10px] text-slate-450 mt-0.5">Configure device alerts & shortcuts</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {/* App Installation */}
+              {isInstallable && deferredPrompt && (
+                <div className="p-3 bg-gradient-to-br from-indigo-50/50 to-emerald-50/30 border border-indigo-100 rounded-2xl space-y-2.5">
+                  <div>
+                    <h4 className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                      <Smartphone className="h-3.5 w-3.5 text-indigo-600" />
+                      <span>Install Native App Shortcut</span>
+                    </h4>
+                    <p className="text-[10px] text-slate-500 leading-normal mt-1">
+                      Install Syncro as a standalone PWA on your home screen or desktop for a true Android app feel.
+                    </p>
+                  </div>
+                  <button
+                    onClick={triggerInstall}
+                    className="w-full py-2 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[10px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>Install App on Device</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Status Indicators */}
+              <div className="space-y-2 bg-slate-50/50 p-3 rounded-2xl border border-slate-200/50 text-[10px] font-medium text-slate-600">
+                <div className="flex justify-between items-center">
+                  <span>App Standalone State:</span>
+                  <span className="font-bold text-slate-800">
+                    {typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches ? 'Installed / Standalone' : 'Running in Browser'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>Push Service Status:</span>
+                  <span className="flex items-center gap-1">
+                    <span className={`w-1.5 h-1.5 rounded-full ${isSubscribed ? 'bg-emerald-500 animate-pulse' : 'bg-slate-350'}`} />
+                    <span className={isSubscribed ? 'text-emerald-600 font-bold' : 'text-slate-500'}>
+                      {isSubscribed ? 'Subscribed' : 'Inactive'}
+                    </span>
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>System Permission:</span>
+                  <span className={`font-semibold capitalize ${
+                    notificationPermission === 'granted' ? 'text-emerald-600' :
+                    notificationPermission === 'denied' ? 'text-rose-500' : 'text-amber-500'
+                  }`}>
+                    {notificationPermission}
+                  </span>
+                </div>
+              </div>
+
+              {/* Subscription Action Button */}
+              <div>
+                <button
+                  onClick={toggleNotifications}
+                  disabled={isPushLoading}
+                  className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm ${
+                    isSubscribed
+                      ? 'bg-slate-100 hover:bg-slate-200 text-slate-850 border border-slate-200'
+                      : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/10'
+                  }`}
+                >
+                  {isPushLoading ? (
+                    <span className="h-3.5 w-3.5 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+                  ) : isSubscribed ? (
+                    <>
+                      <BellOff className="h-4 w-4 shrink-0" />
+                      <span>Disable System Notifications</span>
+                    </>
+                  ) : (
+                    <>
+                      <Bell className="h-4 w-4 shrink-0 animate-bounce" />
+                      <span>Enable Android & Desktop Alerts</span>
+                    </>
+                  )}
+                </button>
+                
+                {notificationPermission === 'denied' && (
+                  <p className="text-[9px] text-rose-500 font-medium leading-relaxed mt-2 text-center">
+                    Alerts are blocked. Please click the padlock icon in your browser URL bar to re-enable notifications.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
   );
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/\-/g, '+')
+    .replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
 }

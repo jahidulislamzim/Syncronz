@@ -14,7 +14,7 @@ import {
   arrayUnion,
   arrayRemove
 } from 'firebase/firestore';
-import { db } from './client.js';
+import { db, auth } from './client.js';
 import { handleFirestoreError } from './auth.js';
 import {
   TaskStatus,
@@ -645,6 +645,29 @@ export async function addNotification(targetUserId, boardId, boardName, taskId, 
       type,
       createdAt: serverTimestamp()
     });
+
+    // Send push notification asynchronously in background
+    if (auth && auth.currentUser) {
+      auth.currentUser.getIdToken().then((token) => {
+        fetch('/api/send-push', {
+          method: 'POST',
+          keepalive: true,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            targetUserId,
+            boardId,
+            boardName,
+            taskId: taskId || '',
+            title,
+            message,
+            type
+          })
+        }).catch(err => console.error('Failed to trigger background push:', err));
+      }).catch(err => console.error('Failed to fetch user ID token for push:', err));
+    }
   } catch (error) {
     console.warn("Notification delivery skipped or restricted per security rules: ", error);
   }
@@ -780,3 +803,45 @@ export async function writeDocument(collection, docId, data, idToken, fieldsToUp
     throw new Error(`Firestore write failed: ${err}`);
   }
 }
+
+export async function readCollection(collectionPath, idToken) {
+  const url = `${BASE_URL}/${collectionPath}`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${idToken}` },
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  if (!data.documents) return [];
+  return data.documents.map(doc => {
+    const fields = fromFields(doc.fields);
+    const parts = doc.name.split('/');
+    const docId = parts[parts.length - 1];
+    return { docId, ...fields };
+  });
+}
+
+export async function addPushSubscription(userId, subscription) {
+  try {
+    const subscriptionJson = JSON.parse(JSON.stringify(subscription));
+    const subscriptionId = 'sub_' + btoa(subscription.endpoint).replace(/[^a-zA-Z0-9]/g, '').slice(-20);
+    const subRef = doc(db, 'users', userId, 'pushSubscriptions', subscriptionId);
+    await setDoc(subRef, {
+      subscriptionId,
+      ...subscriptionJson,
+      createdAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('Failed to store push subscription in Firestore:', err);
+  }
+}
+
+export async function removePushSubscription(userId, endpoint) {
+  try {
+    const subscriptionId = 'sub_' + btoa(endpoint).replace(/[^a-zA-Z0-9]/g, '').slice(-20);
+    const subRef = doc(db, 'users', userId, 'pushSubscriptions', subscriptionId);
+    await deleteDoc(subRef);
+  } catch (err) {
+    console.error('Failed to remove push subscription from Firestore:', err);
+  }
+}
+

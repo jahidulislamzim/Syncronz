@@ -1,0 +1,19 @@
+{
+  "name": "Syncro Task Manager",
+  "short_name": "Syncro",
+  "description": "Real-time collaborative task manager with modern developer dashboard.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
