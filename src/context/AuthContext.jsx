@@ -152,12 +152,6 @@ export const AuthProvider = ({ children }) => {
   const handleSignUpWithEmail = async (email, password, displayName) => {
     setLoading(true);
     try {
-      const emailLower = email.toLowerCase().trim();
-      const q = query(collection(db, 'users'), where('email', '==', emailLower));
-      const querySnapshot = await getDocs(q);
-      if (!querySnapshot.empty) {
-        throw new Error('auth/email-already-in-use');
-      }
       await registerWithEmail(email, password, displayName);
     } catch (err) {
       setLoading(false);
