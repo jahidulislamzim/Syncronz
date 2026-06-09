@@ -172,6 +172,32 @@ export const KanbanBoard = ({ boardId, isArchived = false }) => {
     if (!inspectingTask) setDeleteConfirm(false);
   }, [inspectingTask]);
 
+  // Auto-transition overdue tasks to In Review
+  useEffect(() => {
+    if (!user || !tasks || tasks.length === 0 || isArchived) return;
+
+    const overdueTasks = tasks.filter(task => 
+      isDeadlineOver(task.dueDate, task.status) && 
+      task.status !== TaskStatus.REVIEW
+    );
+
+    if (overdueTasks.length === 0) return;
+
+    const systemActor = {
+      uid: user.uid,
+      displayName: 'System (Auto-Deadline)',
+      photoURL: profile?.photoURL || user.photoURL || ''
+    };
+
+    overdueTasks.forEach(async (task) => {
+      try {
+        await updateTaskStatus(boardId, task.taskId, TaskStatus.REVIEW, systemActor);
+      } catch (err) {
+        console.error(`Failed to auto-transition task ${task.taskId} to review:`, err);
+      }
+    });
+  }, [tasks, user, boardId, profile, isArchived]);
+
   const handleCreateTask = async (e) => {
     e.preventDefault();
     if (isArchived) {
@@ -446,8 +472,8 @@ export const KanbanBoard = ({ boardId, isArchived = false }) => {
       return;
     }
 
-    // Block transition if task's deadline is over (only creator can do, but since only creator can transition anyway, this is a reinforcing check)
-    if (isDeadlineOver(task.dueDate, task.status)) {
+    // Block transition if task's deadline is over (only creator can do)
+    if (isDeadlineOver(task.dueDate, task.status) && user.uid !== task.creatorId) {
       showToast('The deadline for this task has passed. Only the task creator can update its status.', 'error');
       return;
     }
