@@ -18,7 +18,7 @@ import {
   ArrowRight, FolderKanban, Archive, RefreshCw, Trash2, ChevronRight, 
   ShieldAlert, CheckCircle, Info, FolderLock, Sparkles, LogOut
 } from 'lucide-react';
-import { BoardManagementSkeleton } from '../../../../src/components/PageLoader.jsx';
+import { BoardManagementSkeleton } from '../../../../src/components/pageLoader/index.jsx';
 
 export default function BoardManagement() {
   const { user, profile } = useAuth();

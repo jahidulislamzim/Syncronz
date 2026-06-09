@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Upload, Paperclip, Link2, Plus } from 'lucide-react';
-import { MultiSelectDropdown } from '../../MultiSelectDropdown.jsx';
+import { MultiSelectDropdown } from '../../multiSelectDropdown/index.jsx';
 import { TaskPriority } from '../../../types.js';
 
 export const TaskCreateModal = ({

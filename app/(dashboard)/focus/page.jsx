@@ -6,7 +6,7 @@ import { saveFocusSession, getFocusSessions } from '../../../src/lib/firebase/fi
 import {
   Play, Pause, RotateCcw, Clock, History, CheckCircle
 } from 'lucide-react';
-import { FocusTimerSkeleton } from '../../../src/components/PageLoader.jsx';
+import { FocusTimerSkeleton } from '../../../src/components/pageLoader/index.jsx';
 
 function playBell() {
   try {

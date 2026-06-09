@@ -8,8 +8,8 @@ import { KanbanFilters } from './subcomponents/KanbanFilters.jsx';
 import { KanbanColumn } from './subcomponents/KanbanColumn.jsx';
 import { TaskCreateModal } from './subcomponents/TaskCreateModal.jsx';
 import { TaskInspectorModal } from './subcomponents/TaskInspectorModal.jsx';
-import { TaskProgressReportModal } from '../TaskProgressReportModal.jsx';
-import { TaskCommentsModal } from '../TaskCommentsModal.jsx';
+import { TaskProgressReportModal } from '../taskProgressReportModal/index.jsx';
+import { TaskCommentsModal } from '../taskCommentsModal/index.jsx';
 import { TaskStatus, TaskPriority } from '../../types.js';
 
 export default function KanbanBoardShell({ boardId, isArchived = false }) {

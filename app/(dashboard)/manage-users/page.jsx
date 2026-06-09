@@ -1,6 +1,6 @@
 'use client';
 
-import { ManageUsers } from '../../../src/components/ManageUsers.jsx';
+import { ManageUsers } from '../../../src/components/manageUsers/index.jsx';
 
 export default function ManageUsersPage() {
   return <ManageUsers />;

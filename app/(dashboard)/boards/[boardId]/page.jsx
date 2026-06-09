@@ -7,10 +7,10 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../../../../src/context/AuthContext.jsx';
 import { restoreBoard } from '../../../../src/lib/firebase/firestore.js';
 import { Archive, RotateCcw } from 'lucide-react';
-import { KanbanBoard } from '../../../../src/components/KanbanBoard.jsx';
-import { MembersRoster } from '../../../../src/components/MembersRoster.jsx';
-import { ActivityLog } from '../../../../src/components/ActivityLog.jsx';
-import { BoardDetailSkeleton } from '../../../../src/components/PageLoader.jsx';
+import KanbanBoardShell from '../../../../src/components/kanban/index.jsx';
+import { MembersRoster } from '../../../../src/components/membersRoster/index.jsx';
+import { ActivityLog } from '../../../../src/components/activityLog/index.jsx';
+import { BoardDetailSkeleton } from '../../../../src/components/pageLoader/index.jsx';
 
 export default function BoardDetail() {
   const { boardId } = useParams();
@@ -77,7 +77,7 @@ export default function BoardDetail() {
 
       <div className="flex flex-col lg:flex-row items-stretch lg:space-x-8 space-y-8 lg:space-y-0 h-full">
         <div className="flex-1 flex flex-col justify-start">
-          <KanbanBoard boardId={boardId} isArchived={isArchived} />
+          <KanbanBoardShell boardId={boardId} isArchived={isArchived} />
         </div>
         <div className="w-full lg:w-[280px] shrink-0 space-y-6">
           <MembersRoster boardId={boardId} creatorId={board?.creatorId || ''} boardName={board?.name || 'Project Board'} isArchived={isArchived} />

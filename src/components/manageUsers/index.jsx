@@ -10,7 +10,7 @@ import { ManageUsersTabs } from './subcomponents/ManageUsersTabs.jsx';
 import { InviteTabPane } from './subcomponents/InviteTabPane.jsx';
 import { MembersTabPane } from './subcomponents/MembersTabPane.jsx';
 import { AdminTabPane } from './subcomponents/AdminTabPane.jsx';
-import { ManageUsersSkeleton } from '../PageLoader.jsx';
+import { ManageUsersSkeleton } from '../pageLoader/index.jsx';
 
 const Toast = ({ message, type, onClose }) => (
   <motion.div

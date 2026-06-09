@@ -7,7 +7,7 @@ import { StatsGrid } from './subcomponents/StatsGrid.jsx';
 import { BoardsListCard } from './subcomponents/BoardsListCard.jsx';
 import { MembersListCard } from './subcomponents/MembersListCard.jsx';
 import { QuickActionsCard } from './subcomponents/QuickActionsCard.jsx';
-import { DashboardSkeleton } from '../PageLoader.jsx';
+import { DashboardSkeleton } from '../pageLoader/index.jsx';
 
 export const Dashboard = () => {
   const {

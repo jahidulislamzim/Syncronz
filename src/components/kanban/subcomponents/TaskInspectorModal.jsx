@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Edit, Trash2, AlignLeft, Tag, Check, Calendar, MessageSquare, CheckSquare, Square, Upload, User, BarChart3 } from 'lucide-react';
-import { MultiSelectDropdown } from '../../MultiSelectDropdown.jsx';
+import { MultiSelectDropdown } from '../../multiSelectDropdown/index.jsx';
 import { TaskStatus, TaskPriority } from '../../../types.js';
 import { SubtaskList } from './SubtaskList.jsx';
 import { AttachmentList, AttachmentRow } from './AttachmentList.jsx';

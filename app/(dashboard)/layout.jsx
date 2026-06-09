@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../src/context/AuthContext.jsx';
 import { Sidebar } from '../../src/layout/Sidebar.jsx';
-import { Header } from '../../src/components/Header.jsx';
+import HeaderShell from '../../src/components/header/index.jsx';
 
 const LoadingScreen = () => (
   <div className="min-h-screen bg-[#0F172A] flex flex-col items-center justify-center p-6 relative overflow-hidden">
@@ -49,7 +49,7 @@ export default function DashboardLayout({ children }) {
       <div className="flex h-screen w-screen bg-[#F8FAFC] font-sans text-slate-800 overflow-hidden">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-          <Header onToggleSidebar={() => setSidebarOpen(v => !v)} />
+          <HeaderShell onToggleSidebar={() => setSidebarOpen(v => !v)} />
           <main className="flex-1 p-4 md:p-8 overflow-y-auto bg-[#F8FAFC] subtle-scroll flex flex-col justify-start">
             {/* Empty content during redirect */}
           </main>
@@ -62,7 +62,7 @@ export default function DashboardLayout({ children }) {
     <div className="flex h-screen w-screen bg-[#F8FAFC] font-sans text-slate-800 overflow-hidden">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-        <Header onToggleSidebar={() => setSidebarOpen(v => !v)} />
+        <HeaderShell onToggleSidebar={() => setSidebarOpen(v => !v)} />
         <main className="flex-1 p-4 md:p-8 overflow-y-auto bg-[#F8FAFC] subtle-scroll flex flex-col justify-start">
           {children}
         </main>
