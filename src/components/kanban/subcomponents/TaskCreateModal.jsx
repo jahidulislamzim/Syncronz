@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Upload, Paperclip, Link2, Plus } from 'lucide-react';
 import { MultiSelectDropdown } from '../../multiSelectDropdown/index.jsx';
 import { TaskPriority } from '../../../types.js';
+import { Toggle } from '../../ui/Toggle.jsx';
 
 export const TaskCreateModal = ({
   isOpen,
@@ -36,6 +37,8 @@ export const TaskCreateModal = ({
   setLinkName,
   newAttachments,
   setNewAttachments,
+  newAcceptLateSubmit,
+  setNewAcceptLateSubmit,
   handleCreateTask,
   isSubmitting,
   members = [],
@@ -154,6 +157,14 @@ export const TaskCreateModal = ({
                     );
                   })}
                 </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100">
+                <Toggle
+                  checked={newAcceptLateSubmit}
+                  onChange={setNewAcceptLateSubmit}
+                  label="Accept Late Submissions"
+                />
               </div>
 
               {/* Initial Checklist construction */}

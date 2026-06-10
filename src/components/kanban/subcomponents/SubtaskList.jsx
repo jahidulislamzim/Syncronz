@@ -8,7 +8,8 @@ export const SubtaskList = ({
   members = [],
   isArchived = false,
   handleToggleSubtaskViewMode,
-  setIsReportOpen
+  setIsReportOpen,
+  isDeadlineEnforced
 }) => {
   const visibleSubtasks = (task.subtasks || []).filter(sub => {
     if (sub.assigneeType === 'all' || !sub.assigneeType) return true;
@@ -24,7 +25,7 @@ export const SubtaskList = ({
 
   const completedCount = visibleSubtasks.filter(s => 
     s.assigneeType === 'individual' 
-      ? s.completedBy?.includes(user?.uid) 
+      ? (s.completedBy || []).some(item => (typeof item === 'string' ? item : item.uid) === user?.uid)
       : s.completed
   ).length;
 
@@ -71,9 +72,10 @@ export const SubtaskList = ({
           } else {
             canToggle = task.assignees?.some(a => a.uid === user?.uid) || task.assigneeId === user?.uid;
           }
+          canToggle = canToggle && !isDeadlineEnforced?.(task);
           
           const isCompleted = sub.assigneeType === 'individual'
-            ? sub.completedBy?.includes(user?.uid)
+            ? (sub.completedBy || []).some(item => (typeof item === 'string' ? item : item.uid) === user?.uid)
             : sub.completed;
 
           let assignmentBadge = null;
@@ -121,7 +123,7 @@ export const SubtaskList = ({
               ) : (
                 <div 
                   className="flex items-center space-x-2.5 px-3 py-2 border border-slate-200 rounded-xl bg-slate-50/30 cursor-not-allowed min-w-0"
-                  title={isArchived ? "Board is archived" : "You are not authorized to check/uncheck this checklist item"}
+                  title={isArchived ? "Board is archived" : isDeadlineEnforced?.(task) ? "Deadline has passed. Late submissions not accepted." : "You are not authorized to check/uncheck this checklist item"}
                 >
                   {isCompleted ? (
                     <CheckSquare className="h-4 w-4 text-slate-300 shrink-0" />
@@ -140,7 +142,7 @@ export const SubtaskList = ({
                   {sub.assigneeType === 'individual' ? (
                     <div className="flex flex-wrap items-center gap-1">
                       {members.map(m => {
-                        const completed = sub.completedBy?.includes(m.uid);
+                        const completed = (sub.completedBy || []).some(item => (typeof item === 'string' ? item : item.uid) === m.uid);
                         const name = m.displayName || m.email.split('@')[0];
                         const initials = name.slice(0, 2).toUpperCase();
                         return (

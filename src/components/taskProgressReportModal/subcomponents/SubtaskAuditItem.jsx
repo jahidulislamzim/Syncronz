@@ -1,6 +1,10 @@
 import { CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 
-function ParticipantAuditPanel({ completedList, pendingList }) {
+const normalizeCompletedBy = (completedBy) => {
+  return (completedBy || []).map(item => typeof item === 'string' ? { uid: item, completedAt: null } : item);
+};
+
+function ParticipantAuditPanel({ completedList, pendingList, isLateMap }) {
   return (
     <div className="mt-2.5 p-3.5 bg-slate-50 border border-slate-150 rounded-xl space-y-2.5 animate-in slide-in-from-top-2 duration-150">
       <div className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">
@@ -15,9 +19,16 @@ function ParticipantAuditPanel({ completedList, pendingList }) {
           {completedList.length > 0 ? (
             <div className="space-y-1">
               {completedList.map(m => (
-                <div key={m.uid} className="flex items-center space-x-1.5 text-slate-600">
-                  <div className="w-3.5 h-3.5 rounded-full bg-emerald-100 flex items-center justify-center text-[7px] text-emerald-700 font-bold shrink-0">&#10003;</div>
-                  <span className="text-[10px] font-semibold truncate">{m.displayName || m.email?.split('@')[0]}</span>
+                <div key={m.uid} className="flex items-center justify-between text-slate-600">
+                  <div className="flex items-center space-x-1.5 min-w-0">
+                    <div className="w-3.5 h-3.5 rounded-full bg-emerald-100 flex items-center justify-center text-[7px] text-emerald-700 font-bold shrink-0">&#10003;</div>
+                    <span className="text-[10px] font-semibold truncate">{m.displayName || m.email?.split('@')[0]}</span>
+                  </div>
+                  {isLateMap?.[m.uid] && (
+                    <span className="text-[8px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1 py-0.5 rounded shrink-0 ml-1">
+                      Late
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
@@ -58,7 +69,8 @@ export function SubtaskAuditItem({ sub, index, members, isExpanded, onToggle }) 
   if (sub.assigneeType === 'individual') {
     badgeColor = 'bg-amber-50 text-amber-600 border-amber-150';
     badgeText = 'Individual';
-    completedCount = Array.isArray(sub.completedBy) ? sub.completedBy.length : 0;
+    const cb = normalizeCompletedBy(sub.completedBy);
+    completedCount = cb.length;
     totalTarget = members.length;
     completionText = `${completedCount}/${totalTarget} done`;
   } else if (sub.assigneeType === 'specific') {
@@ -70,16 +82,25 @@ export function SubtaskAuditItem({ sub, index, members, isExpanded, onToggle }) 
 
   let completedList = [];
   let pendingList = [];
+  const isLateMap = {};
 
   if (sub.assigneeType === 'individual') {
-    completedList = members.filter(m => Array.isArray(sub.completedBy) && sub.completedBy.includes(m.uid));
-    pendingList = members.filter(m => !Array.isArray(sub.completedBy) || !sub.completedBy.includes(m.uid));
+    const cb = normalizeCompletedBy(sub.completedBy);
+    const completedUids = cb.map(item => item.uid);
+    completedList = members.filter(m => completedUids.includes(m.uid));
+    pendingList = members.filter(m => !completedUids.includes(m.uid));
+    cb.forEach(item => {
+      if (item.completedAt) isLateMap[item.uid] = true;
+    });
   } else if (sub.assigneeType === 'specific') {
     const assignedUids = Array.isArray(sub.assignedTo) ? sub.assignedTo : [sub.assignedTo].filter(Boolean);
     const assignedMembers = members.filter(m => assignedUids.includes(m.uid));
     if (sub.completed) {
       completedList = assignedMembers;
       pendingList = [];
+      if (sub.completedAt && sub.completedByUid) {
+        isLateMap[sub.completedByUid] = true;
+      }
     } else {
       completedList = [];
       pendingList = assignedMembers;
@@ -88,6 +109,9 @@ export function SubtaskAuditItem({ sub, index, members, isExpanded, onToggle }) 
     if (sub.completed) {
       completedList = members;
       pendingList = [];
+      if (sub.completedAt && sub.completedByUid) {
+        isLateMap[sub.completedByUid] = true;
+      }
     } else {
       completedList = [];
       pendingList = members;
@@ -130,7 +154,7 @@ export function SubtaskAuditItem({ sub, index, members, isExpanded, onToggle }) 
       </div>
 
       {isExpanded && (
-        <ParticipantAuditPanel completedList={completedList} pendingList={pendingList} />
+        <ParticipantAuditPanel completedList={completedList} pendingList={pendingList} isLateMap={isLateMap} />
       )}
     </div>
   );

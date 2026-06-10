@@ -122,7 +122,12 @@ export default function KanbanBoardShell({ boardId, isArchived = false }) {
     handleFileUpload,
     launchTaskInspector,
     filteredTasks,
-    stats
+    stats,
+    newAcceptLateSubmit,
+    setNewAcceptLateSubmit,
+    editAcceptLateSubmit,
+    setEditAcceptLateSubmit,
+    isDeadlineEnforced
   } = useKanbanBoard(boardId, isArchived);
 
   const columnsDef = [
@@ -256,6 +261,8 @@ export default function KanbanBoardShell({ boardId, isArchived = false }) {
         setLinkName={setLinkName}
         newAttachments={newAttachments}
         setNewAttachments={setNewAttachments}
+        newAcceptLateSubmit={newAcceptLateSubmit}
+        setNewAcceptLateSubmit={setNewAcceptLateSubmit}
         handleCreateTask={handleCreateTask}
         isSubmitting={isSubmitting}
         members={members}
@@ -324,6 +331,9 @@ export default function KanbanBoardShell({ boardId, isArchived = false }) {
         handleEditDeleteAttachment={handleEditDeleteAttachment}
         handleEditFileUpload={handleEditFileUpload}
         handleEditAddLinkAttachment={handleEditAddLinkAttachment}
+        editAcceptLateSubmit={editAcceptLateSubmit}
+        setEditAcceptLateSubmit={setEditAcceptLateSubmit}
+        isDeadlineEnforced={isDeadlineEnforced}
       />
 
       {/* --- TASK STATUS PROGRESS REPORT MODAL --- */}

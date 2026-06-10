@@ -62,7 +62,8 @@ export const AttachmentList = ({
   handleAddLinkAttachment,
   handleDeleteAttachment,
   isSubmitting,
-  isArchived = false
+  isArchived = false,
+  isDeadlineEnforced
 }) => {
   return (
     <div className="pt-4.5 mt-5 border-t border-slate-100">
@@ -123,7 +124,7 @@ export const AttachmentList = ({
       )}
 
       {/* Compact attachments & links row */}
-      {!isArchived && (
+      {!isArchived && !isDeadlineEnforced?.(task) && (
         <div className="space-y-1.5 pt-3 border-t border-slate-100 mt-3">
           <label className="text-[10px] font-bold text-slate-450 uppercase tracking-widest block mb-2.5">
             <Paperclip className="h-3.5 w-3.5 inline mr-1 text-blue-500" /> Attachments & Links

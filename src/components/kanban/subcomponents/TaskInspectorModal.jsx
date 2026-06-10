@@ -6,6 +6,7 @@ import { TaskStatus, TaskPriority } from '../../../types.js';
 import { SubtaskList } from './SubtaskList.jsx';
 import { AttachmentList, AttachmentRow } from './AttachmentList.jsx';
 import { isDeadlineOver } from '../utils/helpers.js';
+import { Toggle } from '../../ui/Toggle.jsx';
 
 export const TaskInspectorModal = ({
   isOpen,
@@ -74,7 +75,10 @@ export const TaskInspectorModal = ({
   // Edit mode attachments/links actions
   handleEditDeleteAttachment,
   handleEditFileUpload,
-  handleEditAddLinkAttachment
+  handleEditAddLinkAttachment,
+  editAcceptLateSubmit,
+  setEditAcceptLateSubmit,
+  isDeadlineEnforced
 }) => {
   if (!task) return null;
 
@@ -125,7 +129,7 @@ export const TaskInspectorModal = ({
                   ID: {task.taskId?.split('_')[1] || ''}
                 </span>
                 <div className="flex items-center space-x-2">
-                  {!isArchived && (
+                  {!isArchived && !isDeadlineEnforced(task) && (
                     <button
                       onClick={() => {
                         setIsEditing(!isEditing);
@@ -239,6 +243,14 @@ export const TaskInspectorModal = ({
                     />
                   </div>
 
+                  <div className="pt-2">
+                    <Toggle
+                      checked={editAcceptLateSubmit}
+                      onChange={setEditAcceptLateSubmit}
+                      label="Accept Late Submissions"
+                    />
+                  </div>
+
                   {/* Edit Tags selection */}
                   <div className="space-y-1.5 pt-1">
                     <label className="text-xs font-bold text-slate-700 block">Task Classification Labels</label>
@@ -317,7 +329,7 @@ export const TaskInspectorModal = ({
                           }
                           
                           const isCompleted = sub.assigneeType === 'individual' 
-                            ? sub.completedBy?.includes(user?.uid) 
+                            ? (sub.completedBy || []).some(item => (typeof item === 'string' ? item : item.uid) === user?.uid)
                             : sub.completed;
 
                           return (
@@ -640,6 +652,7 @@ export const TaskInspectorModal = ({
                       isArchived={isArchived}
                       handleToggleSubtaskViewMode={handleToggleSubtaskViewMode}
                       setIsReportOpen={setIsReportOpen}
+                      isDeadlineEnforced={isDeadlineEnforced}
                     />
 
                     {/* --- ATTACHMENTS HUB (External URLs) --- */}
@@ -658,6 +671,7 @@ export const TaskInspectorModal = ({
                       handleDeleteAttachment={handleDeleteAttachment}
                       isSubmitting={isSubmitting}
                       isArchived={isArchived}
+                      isDeadlineEnforced={isDeadlineEnforced}
                     />
 
                     {/* Controls to transit task status */}

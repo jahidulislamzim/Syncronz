@@ -35,7 +35,7 @@ export const TaskCard = ({
 
   const completedSubs = visibleSubs.filter(s => 
     s.assigneeType === 'individual' 
-      ? s.completedBy?.includes(user?.uid) 
+      ? (s.completedBy || []).some(item => (typeof item === 'string' ? item : item.uid) === user?.uid) 
       : s.completed
   ).length;
 

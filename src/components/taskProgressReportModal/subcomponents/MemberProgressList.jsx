@@ -8,7 +8,7 @@ export function MemberProgressList({ members }) {
       </h4>
 
       <div className="space-y-3.5">
-        {members.map(({ member, assignedCount, completedCount, percentage }) => {
+        {members.map(({ member, assignedCount, completedCount, percentage, lateCount }) => {
           const name = member.displayName || member.email;
           const initials = name.slice(0, 2).toUpperCase();
 
@@ -29,8 +29,15 @@ export function MemberProgressList({ members }) {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between text-xs mb-1">
                   <span className="font-semibold text-slate-700 truncate">{name}</span>
-                  <span className="text-[11px] text-slate-500 font-bold">
-                    {assignedCount > 0 ? `${completedCount}/${assignedCount} items` : 'No items assigned'}
+                  <span className="flex items-center gap-2">
+                    {lateCount > 0 && (
+                      <span className="text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded-md">
+                        Late: {lateCount}
+                      </span>
+                    )}
+                    <span className="text-[11px] text-slate-500 font-bold">
+                      {assignedCount > 0 ? `${completedCount}/${assignedCount} items` : 'No items assigned'}
+                    </span>
                   </span>
                 </div>
 

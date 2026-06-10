@@ -48,6 +48,7 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
   const [editSubtasks, setEditSubtasks] = useState([]);
   const [editTags, setEditTags] = useState([]);
   const [editAttachments, setEditAttachments] = useState([]);
+  const [editAcceptLateSubmit, setEditAcceptLateSubmit] = useState(false);
 
   // Task inline thread states
   const [commentText, setCommentText] = useState('');
@@ -65,6 +66,9 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
   const [newSubtaskAssignedTo, setNewSubtaskAssignedTo] = useState([]);
   const [newSubtaskDropdownOpen, setNewSubtaskDropdownOpen] = useState(false);
   const [inlineSubtasks, setInlineSubtasks] = useState([]);
+
+  // Task creation acceptLateSubmit state
+  const [newAcceptLateSubmit, setNewAcceptLateSubmit] = useState(false);
 
   // File upload states
   const [uploadingFile, setUploadingFile] = useState(false);
@@ -85,6 +89,10 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
   const showToast = (message, type) => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
+  };
+
+  const isDeadlineEnforced = (task) => {
+    return isDeadlineOver(task?.dueDate, task?.status) && !task?.acceptLateSubmit;
   };
 
   // 1. Listen to tasks under boards/{boardId}/tasks
@@ -220,7 +228,8 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
         await updateTaskDetails(boardId, generatedTaskId, {
           tags: newTags,
           subtasks: parsedSubtasks,
-          attachments: newAttachments
+          attachments: newAttachments,
+          acceptLateSubmit: newAcceptLateSubmit
         }, creatorObj);
       }
 
@@ -288,9 +297,9 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
     }
     if (!user || !inspectingTask || !editTitle.trim()) return;
 
-    // Block saving updates if task's deadline is over (only creator can do)
-    if (isDeadlineOver(inspectingTask.dueDate, inspectingTask.status) && user.uid !== inspectingTask.creatorId) {
-      showToast('The deadline for this task has passed. Only the task creator can update its details.', 'error');
+    // Block saving updates if task's deadline is enforced
+    if (isDeadlineEnforced(inspectingTask)) {
+      showToast('The deadline for this task has passed. Late submissions are not accepted.', 'error');
       return;
     }
 
@@ -325,7 +334,8 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
         assignees: assigneeObjs,
         subtasks: editSubtasks,
         tags: editTags,
-        attachments: finalAttachments
+        attachments: finalAttachments,
+        acceptLateSubmit: editAcceptLateSubmit
       };
 
       await updateTaskDetails(boardId, inspectingTask.taskId, fields, actor);
@@ -450,9 +460,9 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
       return;
     }
 
-    // Block transition if task's deadline is over (only creator can do)
-    if (isDeadlineOver(task.dueDate, task.status) && user.uid !== task.creatorId) {
-      showToast('The deadline for this task has passed. Only the task creator can update its status.', 'error');
+    // Block transition if task's deadline is enforced
+    if (isDeadlineEnforced(task)) {
+      showToast('The deadline for this task has passed. Late submissions are not accepted.', 'error');
       return;
     }
 
@@ -574,13 +584,15 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
     setEditSubtasks(prev => prev.map(s => {
       if (s.id !== subtaskId) return s;
       if (s.assigneeType === 'individual') {
-        const completedBy = s.completedBy || [];
-        const updatedCompletedBy = completedBy.includes(user.uid)
-          ? completedBy.filter(uid => uid !== user.uid)
-          : [...completedBy, user.uid];
+        const completedBy = (s.completedBy || []).map(item => typeof item === 'string' ? { uid: item, completedAt: null } : item);
+        const existing = completedBy.find(item => item.uid === user.uid);
+        const updatedCompletedBy = existing
+          ? completedBy.filter(item => item.uid !== user.uid)
+          : [...completedBy, { uid: user.uid, completedAt: null }];
         return { ...s, completedBy: updatedCompletedBy };
       }
-      return { ...s, completed: !s.completed };
+      const toggled = !s.completed;
+      return { ...s, completed: toggled, completedByUid: toggled ? user.uid : null, completedAt: null };
     }));
   };
 
@@ -608,13 +620,13 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
     }
     if (!user) return;
 
-    if (task.status !== TaskStatus.IN_PROGRESS) {
-      showToast('Checklist items can only be updated when the task is In Progress.', 'error');
+    if (isDeadlineEnforced(task)) {
+      showToast('The deadline for this task has passed. Late submissions are not accepted.', 'error');
       return;
     }
 
-    if (isDeadlineOver(task.dueDate, task.status) && user.uid !== task.creatorId) {
-      showToast('The deadline for this task has passed. Only the task creator can update checklist items.', 'error');
+    if (task.status !== TaskStatus.IN_PROGRESS) {
+      showToast('Checklist items can only be updated when the task is In Progress.', 'error');
       return;
     }
 
@@ -636,19 +648,28 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
       }
     }
 
+    const deadlinePassed = isDeadlineOver(task.dueDate, task.status);
+
     setIsSubmitting(true);
     try {
       const subtasks = task.subtasks ? [...task.subtasks] : [];
       const updatedSubtasks = subtasks.map(s => {
         if (s.id !== subtaskId) return s;
         if (s.assigneeType === 'individual') {
-          const completedBy = s.completedBy || [];
-          const updatedCompletedBy = completedBy.includes(user.uid)
-            ? completedBy.filter(uid => uid !== user.uid)
-            : [...completedBy, user.uid];
-          return { ...s, completedBy: updatedCompletedBy };
+          const completedBy = (s.completedBy || []).map(item => typeof item === 'string' ? { uid: item, completedAt: null } : item);
+          const existing = completedBy.find(item => item.uid === user.uid);
+          if (existing) {
+            return { ...s, completedBy: completedBy.filter(item => item.uid !== user.uid) };
+          }
+          return { ...s, completedBy: [...completedBy, { uid: user.uid, completedAt: deadlinePassed ? new Date().toISOString() : null }] };
         }
-        return { ...s, completed: !s.completed };
+        const toggled = !s.completed;
+        return {
+          ...s,
+          completed: toggled,
+          completedByUid: toggled ? user.uid : null,
+          completedAt: toggled && deadlinePassed ? new Date().toISOString() : toggled ? null : null
+        };
       });
       
       const actor = {
@@ -698,10 +719,15 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
       return;
     }
     if (!user || !url.trim()) return;
+    if (isDeadlineEnforced(task)) {
+      showToast('The deadline for this task has passed. Late submissions are not accepted.', 'error');
+      return;
+    }
     if (task.status !== TaskStatus.IN_PROGRESS) {
       showToast('Links can only be attached when the task is In Progress.', 'error');
       return;
     }
+    const deadlinePassed = isDeadlineOver(task.dueDate, task.status);
     setIsSubmitting(true);
     try {
       const attachments = task.attachments ? [...task.attachments] : [];
@@ -711,7 +737,8 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
         name: safeName,
         url: url.trim().startsWith('http') ? url.trim() : `https://${url.trim()}`,
         uploadedAt: new Date().toISOString(),
-        uploadedBy: { uid: user.uid, displayName: profile?.displayName || user.displayName || '' }
+        uploadedBy: { uid: user.uid, displayName: profile?.displayName || user.displayName || '' },
+        lateSubmit: deadlinePassed ? true : false
       };
       const updatedAttachments = [...attachments, newAttachment];
 
@@ -832,6 +859,7 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
 
   const handleEditAddLinkAttachment = (name, url) => {
     const isTaskCreator = user?.uid === liveInspectingTask?.creatorId;
+    const deadlinePassed = isDeadlineOver(liveInspectingTask?.dueDate, liveInspectingTask?.status);
     const safeName = name.trim() || 'Link URL';
     const newAttachment = {
       id: `link_${Math.random().toString(36).substring(2, 9)}`,
@@ -839,7 +867,8 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
       url: url.trim().startsWith('http') ? url.trim() : `https://${url.trim()}`,
       uploadedAt: new Date().toISOString(),
       uploadedBy: { uid: user.uid, displayName: profile?.displayName || user.displayName || '' },
-      addedAtCreation: isTaskCreator
+      addedAtCreation: isTaskCreator,
+      lateSubmit: deadlinePassed ? true : false
     };
     setEditAttachments(prev => [...prev, newAttachment]);
   };
@@ -869,11 +898,13 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
         throw new Error(`Upload failed: ${err}`);
       }
       const isTaskCreator = user?.uid === liveInspectingTask?.creatorId;
+      const deadlinePassed = isDeadlineOver(liveInspectingTask?.dueDate, liveInspectingTask?.status);
       const attachment = await uploadRes.json();
       const enriched = {
         ...attachment,
         uploadedBy: { uid: user.uid, displayName: profile?.displayName || user.displayName || '' },
-        addedAtCreation: isTaskCreator
+        addedAtCreation: isTaskCreator,
+        lateSubmit: deadlinePassed ? true : false
       };
       setEditAttachments(prev => [...prev, enriched]);
     } catch (error) {
@@ -891,10 +922,15 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
     }
     const file = e.target.files?.[0];
     if (!file || !task) return;
+    if (isDeadlineEnforced(task)) {
+      showToast('The deadline for this task has passed. Late submissions are not accepted.', 'error');
+      return;
+    }
     if (task.status !== TaskStatus.IN_PROGRESS) {
       showToast('Files can only be uploaded when the task is In Progress.', 'error');
       return;
     }
+    const deadlinePassed = isDeadlineOver(task.dueDate, task.status);
     e.target.value = '';
     setUploadingFile(true);
     try {
@@ -919,7 +955,8 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
       const attachment = await uploadRes.json();
       const enriched = {
         ...attachment,
-        uploadedBy: { uid: user.uid, displayName: profile?.displayName || user.displayName || '' }
+        uploadedBy: { uid: user.uid, displayName: profile?.displayName || user.displayName || '' },
+        lateSubmit: deadlinePassed ? true : false
       };
 
       const actor = {
@@ -958,6 +995,7 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
     setEditSubtasks(task.subtasks ? [...task.subtasks] : []);
     setEditTags(task.tags ? [...task.tags] : []);
     setEditAttachments(task.attachments ? [...task.attachments] : []);
+    setEditAcceptLateSubmit(task.acceptLateSubmit || false);
     setIsEditing(false);
   };
 
@@ -1061,6 +1099,11 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
     setNewSubtaskDropdownOpen,
     inlineSubtasks,
     setInlineSubtasks,
+    newAcceptLateSubmit,
+    setNewAcceptLateSubmit,
+    editAcceptLateSubmit,
+    setEditAcceptLateSubmit,
+    isDeadlineEnforced,
     uploadingFile,
     uploadingCreationFile,
     fileInputRef,
