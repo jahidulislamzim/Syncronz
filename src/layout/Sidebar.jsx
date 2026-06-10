@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '../context/AuthContext.jsx';
 import { db } from '../lib/firebase/client.js';
 import { collection, query, onSnapshot } from 'firebase/firestore';
-import { Landmark, ShieldCheck, Plus, Timer, Settings, X, ChevronRight, Download } from 'lucide-react';
+import { Landmark, ShieldCheck, Plus, Timer, CalendarDays, Settings, X, ChevronRight, Download } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 export const Sidebar = ({ isOpen, onClose }) => {
@@ -168,6 +168,15 @@ export const Sidebar = ({ isOpen, onClose }) => {
         >
           <Timer className="w-4 h-4 text-emerald-400" />
           <span>Focus</span>
+        </Link>
+
+        <Link
+          href="/calendar"
+          onClick={onClose}
+          className={`w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl text-sm transition cursor-pointer ${isActive('/calendar') ? 'bg-slate-800 text-white font-semibold' : 'text-slate-100 hover:bg-slate-800/60 hover:text-white font-medium'}`}
+        >
+          <CalendarDays className="w-4 h-4 text-violet-400" />
+          <span>Calendar</span>
         </Link>
 
         <div className="mt-3 mb-1 border-t border-slate-800/60" />
