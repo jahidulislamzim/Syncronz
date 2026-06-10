@@ -460,8 +460,8 @@ export const useKanbanBoard = (boardId, isArchived = false) => {
       return;
     }
 
-    // Block transition if task's deadline is enforced
-    if (isDeadlineEnforced(task)) {
+    // Block transition if task's deadline is enforced, unless moving from review to done
+    if (isDeadlineEnforced(task) && targetStatus !== TaskStatus.DONE) {
       showToast('The deadline for this task has passed. Late submissions are not accepted.', 'error');
       return;
     }
